@@ -3,7 +3,7 @@
 # description: This script creates a new Azure DevOps project and repository using the Azure DevOps CLI. 
 #              It also adds users to the organization and project, and creates a new repository.
 # author: Ivan Porta
-# date: 2023-02-18
+# date: 2021-05-18
 
 function out {
     case "$1" in
@@ -351,22 +351,324 @@ function create_pipeline_pipelines {
         #     "https://dev.azure.com/$ORG_NAME/$PROJECT_NAME/_apis/pipelines?api-version=7.0" 
     done
 }
+function assing_security_groups_to_environments {
+    local ORG_NAME=$1
+    local PROJECT_NAME=$2
+    local DEFAULT_JSON=$3
+    out "Assign security groups to environments in $PROJECT_NAME project"
+    for ENVIRONMENT in $(echo "$DEFAULT_JSON" | jq -r '.pipeline.environments[] | @base64'); do
+        ENVIRONMENT_JSON=$(echo "$ENVIRONMENT" | base64 --decode | jq -r '.')
+        ENVIRONMENT_NAME=$(echo "$ENVIRONMENT_JSON" | jq -r '.name')
+        out "Get project ID by $PROJECT_NAME"
+        PROJECT_ID=$(az devops project show --project $PROJECT_NAME | jq -r '.id')
+         if [ $? -eq 0 ]; then
+            out success "The ID of the $PROJECT_NAME project is $PROJECT_ID"
+        else
+            out error "Error during the reading of the property ID of the $PROJECT_ID"
+            exit 1
+        fi
+        for SECURITY_GROUP in $(echo "${ENVIRONMENT_JSON}" | jq -r '.security_groups_name[] | @base64'); do
+            SECURITY_GROUP_JSON=$(echo "${SECURITY_GROUP}" | base64 --decode)
+            NAME=$(echo "${SECURITY_GROUP_JSON}" | jq -r '.name')
+            ROLE=$(echo "${SECURITY_GROUP_JSON}" | jq -r '.role_name')
+            out "Get security group ID for $NAME"
+            SECURITY_GROUP_ID=$(az devops security group list --project $PROJECT_NAME --org https://dev.azure.com/$ORG_NAME --output json | jq -r '.graphGroups[] | select(.displayName == "'"$NAME"'") | .originId')
+            if [ $? -eq 0 ]; then
+                out success "The ID of the $NAME security group is $SECURITY_GROUP_ID"
+            else
+                out error "Error during the reading of the property ID of the $NAME security group"
+                exit 1
+            fi
+            echo "Get evnironment ID by $ENVIRONMENT_NAME"
+            RESPONSE=$(curl --silent \
+                --write-out "\n%{http_code}" \
+                --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+                --header "Content-Type: application/json" \
+                "https://dev.azure.com/$ORG_NAME/$PROJECT_NAME/_apis/distributedtask/environments?api-version=5.0-preview.1")
+            HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+            RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+            if [ $HTTP_STATUS != 200 ]; then
+                out error "Failed to get the $NAME environment ID. $RESPONSE"
+                exit 1;
+            else
+                out success "The ID of the $ENVIRONMENT_NAME environment was succesfully retrieved"
+            fi
+            ENVIRONMENT_ID=$(echo "$RESPONSE_BODY" | jq '.value[] | select(.name == "'"$ENVIRONMENT_NAME"'") | .id' | tr -d '"')  
+            RESPONSE=$(curl --silent \
+                --write-out "\n%{http_code}" \
+                --request PUT \
+                --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+                --header "Content-Type: application/json" \
+                --data-raw '[{"roleName": "'"$ROLE"'","userId": "'"$SECURITY_GROUP_ID"'"}]' \
+                "https://dev.azure.com/$ORG_NAME/_apis/securityroles/scopes/distributedtask.environmentreferencerole/roleassignments/resources/$PROJECT_ID"_"$ENVIRONMENT_ID?api-version=5.0-preview.1")
+            HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+            RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+            out "Response body: $RESPONSE_BODY"
+            if [ $HTTP_STATUS != 200 ]; then
+                out error "Failed to associate the $NAME security group to the $ENVIRONMENT_NAME environment. $RESPONSE"
+                exit 1;
+            else
+                out success "The $NAME security group was successfully associated to the $ENVIRONMENT_NAME environment"
+            fi
+        done
+    done
+}
+function create_service_endpoints {
+    local ORG_NAME=$1
+    local PROJECT_NAME=$2
+    local DEFAULT_JSON=$3
+    out "Create service endpoints in $PROJECT_NAME project"
+    out "Read organization ID. This property is needed to get a list of service endpoints"
+    RESPONSE=$(curl --silent \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json" \
+            --data-raw '{"contributionIds": ["ms.vss-features.my-organizations-data-provider"],"dataProviderContext":{"properties":{}}}' \
+            "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Failed to get the list of existing service endpoints. $RESPONSE"
+        exit 1;
+    else
+        out success "The list of existing service endpoints was succesfully retrieved"
+    fi
+    ORG_ID=$(echo "$RESPONSE_BODY" | jq '.dataProviders."ms.vss-features.my-organizations-data-provider".organizations[] | select(.name == "'"$ORG_NAME"'") | .id' | tr -d '"')
+    out "The ID of the $ORG_NAME organization is $ORG_ID"
+    out "Read the list of existing service endpoints"
+    RESPONSE=$(curl --silent \
+            --request POST \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json" \
+            --data-raw '{"contributionIds":["ms.vss-distributed-task.resources-hub-query-data-provider"],"dataProviderContext":{"properties":{"resourceFilters":{"createdBy":[],"resourceType":[],"searchText":""},"sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/'$PROJECT_NAME'/_settings/adminservices","routeId":"ms.vss-admin-web.project-admin-hub-route","routeValues":{"project":"Sample","adminPivot":"adminservices","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
+            "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    SERVICE_ENDPOINT_LIST_RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Failed to get the list of existing service endpoints. $RESPONSE"
+        exit 1;
+    else
+        out success "The list of existing service endpoints was succesfully retrieved"
+    fi
+    out $SERVICE_ENDPOINT_LIST_RESPONSE_BODY
+    for SERVICE_ENDPOINT in $(echo "$DEFAULT_JSON" | jq -r '.pipeline.service_endpoints[] | @base64'); do
+        SERVICE_ENDPOINT_JSON=$(echo "$SERVICE_ENDPOINT" | base64 --decode | jq -r '.')
+        out "Creating Azure service endpoint"
+        for AZURE_SERVICE_ENDPOINT in $(echo "$SERVICE_ENDPOINT_JSON" | jq -r '.azurerm[] | @base64'); do
+            AZURE_SERVICE_ENDPOINT_JSON=$(echo "$AZURE_SERVICE_ENDPOINT" | base64 --decode | jq -r '.')
+            NAME=$(echo "$AZURE_SERVICE_ENDPOINT_JSON" | jq -r '.name')
+            TENANT_ID=$(echo "$AZURE_SERVICE_ENDPOINT_JSON" | jq -r '.tenant_id')
+            SUBSCRIPTION_ID=$(echo "$AZURE_SERVICE_ENDPOINT_JSON" | jq -r '.subscription_id')
+            SUBSCRIPTION_NAME=$(echo "$AZURE_SERVICE_ENDPOINT_JSON" | jq -r '.subscription_name')
+            SERVICE_PRINCIPAL_ID=$(echo "$AZURE_SERVICE_ENDPOINT_JSON" | jq -r '.service_principal_id')
+            # AZURE_SERVICE_CONNECTION_SERVICE_PRINCIPAL_KEY=$(echo "$AZURE_SERVICE_ENDPOINT_JSON" | jq -r '.service_principal_key')
+            out "Checking if $NAME service endpoint already exists"      
+            if [ $(echo "$SERVICE_ENDPOINT_LIST_RESPONSE_BODY" | jq '.dataProviders."ms.vss-distributed-task.resources-hub-query-data-provider".resourceItems[] | select(.name == "'"$NAME"'") | length') -gt 0 ]; then
+                out "$NAME service endpoint already exists. Skipping..."
+                continue
+            else
+                out "$NAME service endpoint does not exist."
+            fi
+            out "Creating $NAME service endpoint"
+            RESPONSE=$(az devops service-endpoint azurerm create --azure-rm-service-principal-id "$SERVICE_PRINCIPAL_ID" --azure-rm-subscription-id "$SUBSCRIPTION_ID" --azure-rm-subscription-name "$SUBSCRIPTION_NAME" --azure-rm-tenant-id "$TENANT_ID" --name "$NAME" --organization "https://dev.azure.com/$ORG_NAME" --project "$PROJECT_NAME" --output json)
+            if [ $? -eq 0 ]; then
+                out success "The $NAME service endpoint was successfully created"
+            else
+                out error "Error during the creation of the $NAME service endpoint"
+                exit 1
+            fi
+        done
+        for GITHUB_SERVICE_ENDPOINT in $(echo "$SERVICE_ENDPOINT_JSON" | jq -r '.github[] | @base64'); do
+            GITHUB_SERVICE_ENDPOINT_JSON=$(echo "$GITHUB_SERVICE_ENDPOINT" | base64 --decode | jq -r '.')
+            NAME=$(echo "$GITHUB_SERVICE_ENDPOINT_JSON" | jq -r '.name')
+            URL=$(echo "$GITHUB_SERVICE_ENDPOINT_JSON" | jq -r '.url')
+            # AZURE_DEVOPS_EXT_GITHUB_PAT=$(echo "$GITHUB_SERVICE_ENDPOINT_JSON" | jq -r '.token')
+            out "Checking if $NAME service endpoint already exists"  
+            if [[ $(echo "$SERVICE_ENDPOINT_LIST_RESPONSE_BODY" | jq '.dataProviders."ms.vss-distributed-task.resources-hub-query-data-provider".resourceItems[] | select(.name == "'"$NAME"'") | length') -gt 0 ]]; then
+                out "$NAME service endpoint already exists. Skipping..."
+                continue
+            else
+                out "$NAME service endpoint does not exist."
+            fi
+            out "Creating $NAME service endpoint"
+            RESPONSE=$(az devops service-endpoint github create --github-url "$URL" --name "$NAME" --organization "https://dev.azure.com/$ORG_NAME" --project "$PROJECT_NAME" --output json)
+            if [ $? -eq 0 ]; then
+                out success "The $NAME service endpoint was successfully created"
+            else
+                out error "Error during the creation of the $NAME service endpoint"
+                exit 1
+            fi
+        done
+    done
+}
+function create_agent_pools {
+    local ORG_NAME=$1
+    local PROJECT_NAME=$2
+    local DEFAULT_JSON=$3
+    out "Creating agent pools in $PROJECT_NAME project"
+    out "Read organization ID by $ORG_NAME. This property is needed to get a list of service endpoints"
+    RESPONSE=$(curl --silent \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json" \
+            --data-raw '{"contributionIds": ["ms.vss-features.my-organizations-data-provider"],"dataProviderContext":{"properties":{}}}' \
+            "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Failed to get the list of existing service endpoints. $RESPONSE"
+        exit 1;
+    else
+        out success "The list of existing service endpoints was succesfully retrieved"
+    fi
+    ORG_ID=$(echo "$RESPONSE_BODY" | jq '.dataProviders."ms.vss-features.my-organizations-data-provider".organizations[] | select(.name == "'"$ORG_NAME"'") | .id' | tr -d '"')
+    out "The ID of the $ORG_NAME organization is $ORG_ID"
+    out "Get project ID by $PROJECT_NAME"
+    PROJECT_ID=$(az devops project show --project $PROJECT_NAME | jq -r '.id')
+    if [ $? -eq 0 ]; then
+        out success "The ID of the $PROJECT_NAME project is $PROJECT_ID"
+    else
+        out error "Error during the reading of the property ID of the $PROJECT_ID"
+        exit 1
+    fi
+    out "Get the list of agent pools"
+    RESPONSE=$(curl --silent \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json" \
+            "https://dev.azure.com/$ORG_NAME/$PROJECT_NAME/_apis/distributedtask/queues?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    AGENT_POOL_LIST_RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Failed to get the list of existing pools. $RESPONSE"
+        exit 1;
+    else
+        out success "The list of existing pools was succesfully retrieved"
+    fi
+    for AGENT_POOL in $(echo "$DEFAULT_JSON" | jq -r '.pipeline.agent_pools[] | @base64'); do
+        AGENT_POOL_JSON=$(echo "$AGENT_POOL" | base64 --decode | jq -r '.')
+        out "Creating self-hosted agents"
+        for SELF_HOSTED_AGENT_POOL in $(echo "$AGENT_POOL_JSON" | jq -r '.self_hosted[] | @base64'); do
+            SELF_HOSTED_AGENT_POOL_JSON=$(echo "$SELF_HOSTED_AGENT_POOL" | base64 --decode | jq -r '.')
+            NAME=$(echo "$SELF_HOSTED_AGENT_POOL_JSON" | jq -r '.name')
+            AUTH_PIPELINES=$(echo "$AGENT_POOL_JSON" | jq -r '.authorize_pipelines')
+            out "Check if the $NAME agent pool already exists"
+            if [[ $(echo "$AGENT_POOL_LIST_RESPONSE_BODY" | jq '.value[] | select(.name == "'"$NAME"'") | length') -gt 0 ]]; then
+                out warning "$NAME agent pool already exists. Skipping..."
+                continue
+            else
+                out "$NAME agent pool does not exist."
+            fi
+            echo "Create $NAME self-hosted agent pool"
+            RESPONSE=$(curl --silent \
+                --write-out "\n%{http_code}" \
+                --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+                --header "Content-Type: application/json" \
+                --data-raw '{"name": "'"$NAME"'"}' \
+                "https://dev.azure.com/$ORG_NAME/$PROJECT_NAME/_apis/distributedtask/queues?authorizePipelines=$AUTH_PIPELINES&api-version=5.0-preview.1")
+            HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+            RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+            if [ $HTTP_STATUS != 200 ]; then
+                out error "Failed to create the $NAME agent pool. $RESPONSE"
+                exit 1;
+            else
+                out success "The $NAME agent pool was successfully created"
+            fi
+        done
+        out "Creating azure virtual machine scale set agents"
+        for AZURE_HOSTED_AGENT_POOL in $(echo "$AGENT_POOL_JSON" | jq -r '.azure_virtual_machine_scale_sets[] | @base64'); do
+            AZURE_HOSTED_AGENT_POOL_JSON=$(echo "$AZURE_HOSTED_AGENT_POOL" | base64 --decode | jq -r '.')
+            NAME=$(echo "$AZURE_HOSTED_AGENT_POOL_JSON" | jq -r '.name')
+            AUTH_PIPELINES=$(echo "$AZURE_HOSTED_AGENT_POOL_JSON" | jq -r '.authorize_pipelines')
+            SERVICE_ENDPOINT_NAME=$(echo "$AZURE_HOSTED_AGENT_POOL_JSON" | jq -r '.service_endpoint_name')
+            AUTO_PROVISIONING_PROJECT_POOLS=$(echo "$AZURE_HOSTED_AGENT_POOL_JSON" | jq -r '.auto_provision_project_pools')
+            AZURE_RESOURCE_GROUP_NAME=$(echo "$AZURE_HOSTED_AGENT_POOL_JSON" | jq -r '.azure_resource_group_name')
+            AZURE_VIRTUAL_MACHINE_SCALE_SET_NAME=$(echo "$AZURE_HOSTED_AGENT_POOL_JSON" | jq -r '.azure_virtual_machine_scale_set_name')
+            DESIRED_IDLE=$(echo "$AZURE_HOSTED_AGENT_POOL_JSON" | jq -r '.desired_idle')
+            MAX_CAPACITY=$(echo "$AZURE_HOSTED_AGENT_POOL_JSON" | jq -r '.max_capacity')
+            OS_TYPE=$(echo "$AZURE_HOSTED_AGENT_POOL_JSON" | jq -r '.os_type')
+            MAX_SAVED_NODE_COUNT=$(echo "$AZURE_HOSTED_AGENT_POOL_JSON" | jq -r '.max_saved_node_count')
+            RECYCLE_AFTER_EACH_USE=$(echo "$AZURE_HOSTED_AGENT_POOL_JSON" | jq -r '.recycle_after_each_use')
+            TIME_TO_LIVE_MINUTES=$(echo "$AZURE_HOSTED_AGENT_POOL_JSON" | jq -r '.time_to_live_minutes')
+            out "Check if the $NAME agent pool already exists"
+            if [[ $(echo "$AGENT_POOL_LIST_RESPONSE_BODY" | jq '.value[] | select(.name == "'"$NAME"'") | length') -gt 0 ]]; then
+                out warning "$NAME agent pool already exists. Skipping..."
+                continue
+            else
+                out "$NAME agent pool does not exist."
+            fi
+            out "Read the list of existing service endpoints. Needed to configure the VMSS."
+            RESPONSE=$(curl --silent \
+                --write-out "\n%{http_code}" \
+                --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+                --header "Content-Type: application/json" \
+                "https://dev.azure.com/$ORG_NAME/$PROJECT_ID/_apis/serviceendpoint/endpoints?type=azurerm&api-version=6.0-preview.4")
+            HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+            RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+            echo $RESPONSE_BODY
+            if [ $HTTP_STATUS != 200 ]; then
+                out error "Failed to get the list of existing service endpoints. $RESPONSE"
+                exit 1;
+            else
+                out success "The list of existing service endpoints was succesfully retrieved"
+            fi
+            SERVICE_ENDPOINT=$(echo "$RESPONSE_BODY" | jq -r '.value[] | select(.name == "'"$SERVICE_ENDPOINT_NAME"'")')
+            SERVICE_ENDPOINT_ID=$(echo "$SERVICE_ENDPOINT" | jq -r '.id')
+            SERVICE_ENDPOINT_TENANT_ID=$(echo "$SERVICE_ENDPOINT" | jq -r '.authorization.parameters.tenantid')
+            SERVICE_ENDPOINT_SCOPE=$(echo "$SERVICE_ENDPOINT" | jq -r '.serviceEndpointProjectReferences[] | select(.projectReference.name == "'"$PROJECT_NAME"'") | .projectReference.id')
+            SERVICE_ENDPOINT_SUBSCRIPTION_ID=$(echo "$SERVICE_ENDPOINT" | jq -r '.data.subscriptionId')
+            echo "Create $NAME virtual machine scale set agent pool"
+            RESPONSE=$(curl --silent \
+                --request POST \
+                --write-out "\n%{http_code}" \
+                --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+                --header "Content-Type: application/json" \
+                --data-raw '{"agentInteractiveUI":false,"azureId":"/subscriptions/'$SERVICE_ENDPOINT_SUBSCRIPTION_ID'/resourceGroups/'$AZURE_RESOURCE_GROUP_NAME'/providers/Microsoft.Compute/virtualMachineScaleSets/'$AZURE_VIRTUAL_MACHINE_SCALE_SET_NAME'","desiredIdle":'$DESIRED_IDLE',"maxCapacity":'$MAX_CAPACITY',"osType":'$OS_TYPE',"maxSavedNodeCount":'$MAX_SAVED_NODE_COUNT',"recycleAfterEachUse":'$RECYCLE_AFTER_EACH_USE',"serviceEndpointId":"'$SERVICE_ENDPOINT_ID'","serviceEndpointScope":"'$SERVICE_ENDPOINT_SCOPE'","timeToLiveMinutes":'$TIME_TO_LIVE_MINUTES'}' \
+                "https://dev.azure.com/$ORG_NAME/_apis/distributedtask/elasticpools?poolName=$NAME&authorizeAllPipelines=$AUTH_PIPELINES&autoProvisionProjectPools=$AUTO_PROVISIONING_PROJECT_POOLS&projectId=$PROJECT_ID&api-version=6.1-preview.1")
+            HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+            RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+            if [ $HTTP_STATUS != 200 ]; then
+                out error "Failed to create the $NAME agent pool. $RESPONSE"
+                exit 1;
+            else
+                out success "The $NAME agent pool was successfully created"
+            fi
+        done
+    done 
+}
 
-PAT="<Insert here your PAT>"
 
+# TODO
+# VERBOSE=false
+# for arg in "$@"; do
+#     if [[ "$arg" == "--verbose" ]]; then
+#         echo "set to true"
+#         VERBOSE=true
+#         echo $VERBOSE
+#         break
+#     fi
+#     echo $VERBOSE
+# done
+
+PAT=""
+# export AZURE_DEVOPS_EXT_PAT=$PAT
 DEFAULT_JSON=$(cat config.json)
 ORG_NAME=$(echo "$DEFAULT_JSON" | jq -r '.organization.name')
-authenticate_to_azure_devops $ORG_NAME
-add_users_to_organization $ORG_NAME "$DEFAULT_JSON"
-install_extensions_in_organization $ORG_NAME "$DEFAULT_JSON"
+# authenticate_to_azure_devops $ORG_NAME
+# add_users_to_organization $ORG_NAME "$DEFAULT_JSON"
+# install_extensions_in_organization $ORG_NAME "$DEFAULT_JSON"
 PROJECT_NAME=$(echo "$DEFAULT_JSON" | jq -r '.organization.project.name')
-create_project $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
-create_security_groups $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON" # To fix
-create_repositories $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
-delete_repository $ORG_NAME $PROJECT_NAME $PROJECT_NAME "$DEFAULT_JSON"
-create_work_items $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON" # Add check if the workitem exists
-create_pipeline_environments $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
-create_pipeline_pipelines $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
+# create_project $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
+# create_security_groups $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON" # To fix
+# create_repositories $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
+# delete_repository $ORG_NAME $PROJECT_NAME $PROJECT_NAME "$DEFAULT_JSON"
+# create_work_items $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON" # Add check if the workitem exists
+# create_pipeline_environments $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
+# create_pipeline_pipelines $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
+# assing_security_groups_to_environments $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
+# create_service_endpoints $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
+# create_agent_pools $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
 
 
 # echo "Creating branch protection policies in the $PROJECT_NAME project"
@@ -467,52 +769,8 @@ create_pipeline_pipelines $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
 
 
 
-echo "Assign security groups to environments in $PROJECT_NAME project"
-for ENVIRONMENT in $(echo "$DEFAULT_JSON" | jq -r '.pipeline.environments[] | @base64'); do
-    ENVIRONMENT_JSON=$(echo "$ENVIRONMENT" | base64 --decode | jq -r '.')
-    ENVIRONMENT_NAME=$(echo "$ENVIRONMENT_JSON" | jq -r '.name')
-    PROJECT_ID=$(az devops project show --project $PROJECT_NAME | jq -r '.id')
-    for SECURITY_GROUP in $(echo "${ENVIRONMENT_JSON}" | jq -r '.security_groups_name[] | @base64'); do
-        SECURITY_GROUP_JSON=$(echo "${SECURITY_GROUP}" | base64 --decode)
-        NAME=$(echo "${SECURITY_GROUP_JSON}" | jq -r '.name')
-        ROLE=$(echo "${SECURITY_GROUP_JSON}" | jq -r '.role_name')
-        out "Get security group ID for $NAME"
-        SECURITY_GROUP_ID=$(az devops security group list --project $PROJECT_NAME --org https://dev.azure.com/$ORG_NAME --output json | jq -r '.graphGroups[] | select(.displayName == "'"$NAME"'") | .originId')
-        
 
-        echo "Get evnironment ID by $ENVIRONMENT_NAME"
-        RESPONSE=$(curl --silent \
-            --write-out "\n%{http_code}" \
-            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-            --header "Content-Type: application/json" \
-            "https://dev.azure.com/$ORG_NAME/$PROJECT_NAME/_apis/distributedtask/environments?api-version=5.0-preview.1")
-        HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-        RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-        if [ $HTTP_STATUS != 200 ]; then
-            out error "Failed to get the $NAME environment ID. $RESPONSE"
-            exit 1;
-        else
-            out success "The ID of the $ENVIRONMENT_NAME environment was succesfully retrieved"
-        fi
-        ENVIRONMENT_ID=$(echo "$RESPONSE_BODY" | jq '.value[] | select(.name == "'"$ENVIRONMENT_NAME"'") | .id' | tr -d '"')  
-        RESPONSE=$(curl --silent \
-            --write-out "\n%{http_code}" \
-            --request PUT \
-            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-            --header "Content-Type: application/json" \
-            --data-raw '[{"roleName": "'"$ROLE"'","userId": "'"$SECURITY_GROUP_ID"'"}]' \
-            "https://dev.azure.com/$ORG_NAME/_apis/securityroles/scopes/distributedtask.environmentreferencerole/roleassignments/resources/$PROJECT_ID"_"$ENVIRONMENT_ID?api-version=5.0-preview.1")
-        HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-        RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-        out "Response body: $RESPONSE_BODY"
-        if [ $HTTP_STATUS != 200 ]; then
-            out error "Failed to associate the $NAME security group to the $ENVIRONMENT_NAME environment. $RESPONSE"
-            exit 1;
-        else
-            out success "The $NAME security group was successfully associated to the $ENVIRONMENT_NAME environment"
-        fi
-    done
-done
+
 
 
 
