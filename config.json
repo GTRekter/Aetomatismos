@@ -1,10 +1,10 @@
 {
     "organization": {
-        "name": "portaivan",
+        "name": "",
         "users": [
             {
-                "name": "<insert here your name>",
-                "email": "<insert here your email>"
+                "name": "",
+                "email": ""
             }
         ],
         "extensions": [
@@ -831,8 +831,59 @@
                 "work-item-linking": [],
                 "build": []
             }
-        },
+    },
     "pipeline": {
+        "service_endpoints": [
+            {
+                "azurerm": [
+                    {
+                        "name": "Azure Development",
+                        "tenant_id": "00434baa-68ec-4d73-b0a2-fec5bac28891",
+                        "subscription_name": "Microsoft VSES",
+                        "subscription_id": "49bd11f3-09ce-4ecf-9f96-e026a292f054",
+                        "service_principal_id": "a89b4f53-1622-4a47-866c-0ae919250a7f",
+                        "service_principal_key": ""
+                    }
+                ],
+                "github": [
+                    {
+                        "name": "GitHub",
+                        "url": "https://github.com/GTRekter",
+                        "token": ""
+                    }
+                ]
+            }
+        ],
+        "agent_pools": [
+            {
+                "self_hosted":[
+                    {
+                        "name": "Default",
+                        "authorize_pipelines": false
+                    },
+                    {
+                        "name": "On-Premises",
+                        "authorize_pipelines": false
+                    }
+                ],
+                "azure_virtual_machine_scale_sets": [
+                    {
+                        "name":"Sample",
+                        "authorize_pipelines": false,
+                        "auto_provision_project_pools": true,
+                        "azure_resource_group_name": "rg-training-dev",
+                        "azure_virtual_machine_scale_set_name": "vmss-training-dev-02",
+                        "desired_idle": 1,
+                        "max_capacity": 2,
+                        "os_type": 1,
+                        "max_saved_node_count": 0,
+                        "recycle_after_each_use": true,
+                        "time_to_live_minutes": 30,
+                        "service_endpoint_name": "Sample"                   
+                    }
+                ]
+            }
+        ],
         "pipelines": [
             {
                 "name": "AD_Groups_RBAC",
