@@ -1,6 +1,9 @@
 {
     "organization": {
-        "name": "",
+        "name": "portaivan",
+        "azure_active_directory": {
+            "tenant_id": ""
+        },
         "users": [
             {
                 "name": "",
@@ -49,6 +52,17 @@
                     "description": "Users who are allowed to approve the deployment of the Terraform configuration to the production environment"
                 }
             ]
+        },
+        "policies": {
+            "third_party_application_access_via_oauth": true,
+            "ssh_authentication": true,
+            "log_audit_events": true,
+            "allow_public_projects": true,
+            "additional_protections_public_package_registries": true,
+            "enable_azure_active_directory_conditional_access_policy_validation": true,
+            "enable_external_guest_access": true,
+            "allow_team_and_project_administrators_to_invite_new_users": true,
+            "request_access": true
         }
     },
     "board": {
