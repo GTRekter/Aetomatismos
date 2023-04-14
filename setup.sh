@@ -637,6 +637,327 @@ function create_agent_pools {
         done
     done 
 }
+function connecting_organization_to_azure_active_directory {
+    local ORG_NAME=$1
+    local DEFAULT_JSON=$2
+    TENANT_ID=$(echo "$DEFAULT_JSON" | jq -r '.organization.azure_active_directory.tenant_id')
+    out "Connecting to $TENANT_ID tenant Azure Active Directory"
+
+    # This call just return the list of possible tenants
+    # out "Check if the $ORG_NAME organization is already connected to Azure Active Directory"
+    # RESPONSE=$(curl --silent \
+    #         --write-out "\n%{http_code}" \
+    #         --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+    #         --header "Content-Type: application/json" \
+    #         --data-raw '{"contributionIds":["ms.vss-admin-web.organization-admin-aad-user-tenants-data-provider"],"dataProviderContext":{"properties":{"sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/organizationAad","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"organizationAad","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
+    #         "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    # HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    # RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    # if [ $HTTP_STATUS != 200 ]; then
+    #     out error "Error during the retrieval of the list of existing Azure Active Directories"
+    #     exit 1;
+    # else
+    #     out success "The list of existing Azure Active Directories was retrieved successfully"
+    # fi
+    # if [[ $(echo "$RESPONSE_BODY" | jq -r '.dataProviders."ms.vss-admin-web.organization-admin-aad-user-tenants-data-provider".userTenantData.userTenants | length') -ge 1 ]]; then    
+    #     DISPLAY_NAME=$(echo "$RESPONSE_BODY" | jq -r '.dataProviders."ms.vss-admin-web.organization-admin-aad-user-tenants-data-provider".userTenantData.userTenants[0].displayName')
+    #     ID=$(echo "$RESPONSE_BODY" | jq -r '.dataProviders."ms.vss-admin-web.organization-admin-aad-user-tenants-data-provider".userTenantData.userTenants[0].id')
+    #     out warning "The $ORG_NAME organization is already connected to the $DISPLAY_NAME ($ID) Azure Active Directory. Skipping..."
+    #     return 1
+    # else
+    #     out "The $ORG_NAME organization is not connected to Azure Active Directory. Connecting..."
+    # fi
+    out "Check if the $ORG_NAME organization is already connected to Azure Active Directory"
+    RESPONSE=$(curl --silent \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json" \
+            "https://dev.azure.com/$ORG_NAME/_settings/organizationAad?__rt=fps&__ver=2")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the retrieval of the list of existing Azure Active Directories"
+        exit 1;
+    else
+        out success "The list of existing Azure Active Directories was retrieved successfully"
+    fi
+    if [[ $(echo "$RESPONSE_BODY" | jq -r '.fps.dataProviders.data."ms.vss-admin-web.organization-admin-aad-data-provider".orgnizationTenantData.domain') != "" ]]; then    
+        DISPLAY_NAME=$(echo "$RESPONSE_BODY" | jq -r '.fps.dataProviders.data."ms.vss-admin-web.organization-admin-aad-data-provider".orgnizationTenantData.displayName')
+        ID=$(echo "$RESPONSE_BODY" | jq -r '.fps.dataProviders.data."ms.vss-admin-web.organization-admin-aad-data-provider".orgnizationTenantData.id')
+        DOMAIN=$(echo "$RESPONSE_BODY" | jq -r '.fps.dataProviders.data."ms.vss-admin-web.organization-admin-aad-data-provider".orgnizationTenantData.domain')
+        out warning "The $ORG_NAME organization is already connected to the $DISPLAY_NAME ($ID) Azure Active Directory. Skipping..."
+        return 1
+    else
+        out "The $ORG_NAME organization is not connected to Azure Active Directory. Connecting..."
+    fi
+    RESPONSE=$(curl --silent \
+            --request PATCH \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json-patch+json" \
+            --data-raw '[{"from":"","op":2,"path":"/TenantId","value":"'$TENANT_ID'"}]' \
+            "https://vssps.dev.azure.com/$ORG_NAME/_apis/Organization/Organizations/Me?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    echo $RESPONSE_BODY
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the connection to Azure Active Directory. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Connection to Azure Active Directory was successful"
+    fi
+}
+function configure_organization_policies {
+    local ORG_NAME=$1
+    local DEFAULT_JSON=$2
+    out "Configure organization policies"
+    THIRD_PARTY_ACCESS_VIA_OAUTH=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.third_party_application_access_via_oauth')
+    out "Setting Third-party application access via OAuth to $THIRD_PARTY_ACCESS_VIA_OAUTH"
+    RESPONSE=$(curl --silent \
+            --request PATCH \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json-patch+json" \
+            --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$THIRD_PARTY_ACCESS_VIA_OAUTH'"}]' \
+            "https://vssps.dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.DisallowOAuthAuthentication?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    echo $RESPONSE_BODY
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the configuration of the Third-party application access via OAuth policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Third-party application access via OAuth policy was successful"
+    fi
+
+    SSH_AUTHENTICATION=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.ssh_authentication')
+    out "Setting SSH authentication to $SSH_AUTHENTICATION"
+    RESPONSE=$(curl --silent \
+            --request PATCH \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json-patch+json" \
+            --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$SSH_AUTHENTICATION'"}]' \
+            "https://vssps.dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.DisallowSecureShell?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    echo $RESPONSE_BODY
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the configuration of the SSH authentication policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the SSH authentication policy was successful"
+    fi
+
+    LOG_AUDIT_EVENTS=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.log_audit_events')
+    out "Setting Log audit events to $LOG_AUDIT_EVENTS"
+    RESPONSE=$(curl --silent \
+            --request PATCH \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json-patch+json" \
+            --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$LOG_AUDIT_EVENTS'"}]' \
+            "https://vssps.dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.LogAuditEvents?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    echo $RESPONSE_BODY
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the configuration of the Log audit events policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Log audit events policy was successful"
+    fi
+
+    # Allow public projects is different wip
+
+    ARTIFACTS_EXTERNAL_PACKAGE_PROTECTION_TOKEN=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.additional_protections_public_package_registries')
+    out "Setting Additional protections for public package registries to $ARTIFACTS_EXTERNAL_PACKAGE_PROTECTION_TOKEN"
+    RESPONSE=$(curl --silent \
+            --request PATCH \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json-patch+json" \
+            --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ARTIFACTS_EXTERNAL_PACKAGE_PROTECTION_TOKEN'"}]' \
+            "https://vssps.dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.ArtifactsExternalPackageProtectionToken?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    echo $RESPONSE_BODY
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the configuration of the Additional protections for public package registries policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Additional protections for public package registries policy was successful"
+    fi
+
+    ENFORCE_AZURE_ACTIVE_DIRECTORY_CONDITIONAL_ACCESS=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.enable_azure_active_directory_conditional_access_policy_validation')
+    out "Setting Additional protections for public package registries to $ENFORCE_AZURE_ACTIVE_DIRECTORY_CONDITIONAL_ACCESS"
+    RESPONSE=$(curl --silent \
+            --request PATCH \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json-patch+json" \
+            --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ENFORCE_AZURE_ACTIVE_DIRECTORY_CONDITIONAL_ACCESS'"}]' \
+            "https://vssps.dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.EnforceAADConditionalAccess?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    echo $RESPONSE_BODY
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the configuration of the Additional protections for public package registries policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Additional protections for public package registries policy was successful"
+    fi
+
+    ALLOW_TEAM_ADMINS_INVITATIONS_ACCESS_TOKEN=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.allow_team_and_project_administrators_to_invite_new_users')
+    out "Setting Additional protections for public package registries to $ALLOW_TEAM_ADMINS_INVITATIONS_ACCESS_TOKEN"
+    RESPONSE=$(curl --silent \
+            --request PATCH \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json-patch+json" \
+            --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ALLOW_TEAM_ADMINS_INVITATIONS_ACCESS_TOKEN'"}]' \
+            "https://vssps.dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.AllowTeamAdminsInvitationsAccessToken?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    echo $RESPONSE_BODY
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the configuration of the Additional protections for public package registries policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Additional protections for public package registries policy was successful"
+    fi
+
+    ALLOW_GUEST_USERS=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.enable_external_guest_access')
+    out "Setting Allow guest users to $ALLOW_GUEST_USERS"
+    RESPONSE=$(curl --silent \
+            --request PATCH \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json-patch+json" \
+            --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ALLOW_GUEST_USERS'"}]' \
+            "https://vssps.dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.DisallowAadGuestUserAccess?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    echo $RESPONSE_BODY
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the configuration of the Allow guest users policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Allow guest users policy was successful"
+    fi
+
+    # request access is different wip
+}
+
+
+# # echo "Enabling invitation of guest users in $ORG_NAME organization for $PROJECT_NAME project"
+# # This operation is currently not supported and has to be done manually
+# # RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://www.example.com)
+# # if [ "$RESPONSE" == "200" ]; then
+# #   echo "Curl was successful"
+# # else
+# #   echo "Curl failed with status code $RESPONSE"
+# # fi
+
+
+
+
+
+# function create_branch_protection_policies {
+#     echo "Creating branch protection policies in the $PROJECT_NAME project"
+#     echo "Creating Approver count policies"
+#     for APPROVER_COUNT_POLICY in $(echo "$DEFAULT_JSON" | jq -r '.repository.policies.approver_count[] | @base64'); do
+#         APPROVER_COUNT_POLICY_JSON=$(echo "$APPROVER_COUNT_POLICY" | base64 --decode | jq -r '.')
+#         REPO_NAME=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.repository_name')
+#         BRANCH_NAME=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.branch_name')
+#         BRANCH_MATCH_TYPE=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.branch_match_type')
+#         ALLOW_DOWNVOTES=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.allow_downvotes')
+#         CREATOR_VOTE_COUNT=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.creator_vote_counts')
+#         MINIMAL_APPROVER_COUNT=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.minimum_approver_count')
+#         RESET_ON_SOURCE_PUSH=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.reset_on_source_push')
+#         echo "Reading ID of the $REPO_NAME repository"
+#         REPO_ID=$(az repos show --repository "$REPO_NAME" --query id --output tsv --org "https://dev.azure.com/$ORG_NAME" --project "$PROJECT_NAME")
+#          if [ $? -eq 0 ]; then
+#             echo "The ID of the $REPO_NAME repository is $REPO_ID"
+#         else
+#             echo "Error during the reading of the property ID of the $REPO_NAME"
+#             exit 1
+#         fi
+#         echo "Creating approver count policy for the $BRANCH_NAME in $REPO_NAME repository"
+#         az repos policy approver-count create --branch-match-type $BRANCH_MATCH_TYPE --allow-downvotes $ALLOW_DOWNVOTES --blocking true --branch $BRANCH_NAME --creator-vote-counts $CREATOR_VOTE_COUNT --enabled true --minimum-approver-count $MINIMAL_APPROVER_COUNT --repository-id $REPO_ID --reset-on-source-push $RESET_ON_SOURCE_PUSH --project "$PROJECT_NAME" --organization "https://dev.azure.com/$ORG_NAME" --verbose
+#         if [ $? -eq 0 ]; then
+#             echo "Approver count policy was added to $BRANCH_NAME in $REPO_NAME repository"
+#         else
+#             echo "Approver count policy was not added to $BRANCH_NAME in $REPO_NAME repository"
+#             exit 1
+#         fi
+#     done
+
+#     az repos policy case-enforcement create --blocking {false, true}
+#                                             --enabled {false, true}
+#                                             --repository-id
+#                                             [--detect {false, true}]
+#                                             [--org]
+#                                             [--project]
+
+#     az repos policy comment-required create --blocking {false, true}
+#                                             --branch
+#                                             --enabled {false, true}
+#                                             --repository-id
+#                                             [--branch-match-type {exact, prefix}]
+#                                             [--detect {false, true}]
+#                                             [--org]
+#                                             [--project]
+
+#     az repos policy merge-strategy create --blocking {false, true}
+#                                           --branch
+#                                           --enabled {false, true}
+#                                           --repository-id
+#                                           [--allow-no-fast-forward {false, true}]
+#                                           [--allow-rebase {false, true}]
+#                                           [--allow-rebase-merge {false, true}]
+#                                           [--allow-squash {false, true}]
+#                                           [--branch-match-type {exact, prefix}]
+#                                           [--detect {false, true}]
+#                                           [--org]
+#                                           [--project]
+
+#     az repos policy required-reviewer create --blocking {false, true}
+#                                              --branch
+#                                              --enabled {false, true}
+#                                              --message
+#                                              --repository-id
+#                                              --required-reviewer-ids
+#                                              [--branch-match-type {exact, prefix}]
+#                                              [--detect {false, true}]
+#                                              [--org]
+#                                              [--path-filter]
+#                                              [--project]
+
+#     az repos policy work-item-linking create --blocking {false, true}
+#                                              --branch
+#                                              --enabled {false, true}
+#                                              --repository-id
+#                                              [--branch-match-type {exact, prefix}]
+#                                              [--detect {false, true}]
+#                                              [--org]
+#                                              [--project]
+
+#     az repos policy build create --blocking {false, true}
+#                                  --branch
+#                                  --build-definition-id
+#                                  --display-name
+#                                  --enabled {false, true}
+#                                  --manual-queue-only {false, true}
+#                                  --queue-on-source-update-only {false, true}
+#                                  --repository-id
+#                                  --valid-duration
+#                                  [--branch-match-type {exact, prefix}]
+#                                  [--detect {false, true}]
+#                                  [--org]
+#                                  [--path-filter]
+#                                  [--project]
+# }
 
 
 # TODO
@@ -652,11 +973,12 @@ function create_agent_pools {
 # done
 
 PAT=""
-# export AZURE_DEVOPS_EXT_PAT=$PAT
 DEFAULT_JSON=$(cat config.json)
 ORG_NAME=$(echo "$DEFAULT_JSON" | jq -r '.organization.name')
-# authenticate_to_azure_devops $ORG_NAME
+authenticate_to_azure_devops $ORG_NAME
 # add_users_to_organization $ORG_NAME "$DEFAULT_JSON"
+configure_organization_policies $ORG_NAME "$DEFAULT_JSON"
+# connecting_organization_to_azure_active_directory $ORG_NAME "$DEFAULT_JSON"
 # install_extensions_in_organization $ORG_NAME "$DEFAULT_JSON"
 PROJECT_NAME=$(echo "$DEFAULT_JSON" | jq -r '.organization.project.name')
 # create_project $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
@@ -671,99 +993,6 @@ PROJECT_NAME=$(echo "$DEFAULT_JSON" | jq -r '.organization.project.name')
 # create_agent_pools $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
 
 
-# echo "Creating branch protection policies in the $PROJECT_NAME project"
-# echo "Creating Approver count policies"
-# for APPROVER_COUNT_POLICY in $(echo "$DEFAULT_JSON" | jq -r '.repository.policies.approver_count[] | @base64'); do
-#     APPROVER_COUNT_POLICY_JSON=$(echo "$APPROVER_COUNT_POLICY" | base64 --decode | jq -r '.')
-#     REPO_NAME=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.repository_name')
-#     BRANCH_NAME=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.branch_name')
-#     BRANCH_MATCH_TYPE=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.branch_match_type')
-#     ALLOW_DOWNVOTES=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.allow_downvotes')
-#     CREATOR_VOTE_COUNT=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.creator_vote_counts')
-#     MINIMAL_APPROVER_COUNT=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.minimum_approver_count')
-#     RESET_ON_SOURCE_PUSH=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.reset_on_source_push')
-#     echo "Reading ID of the $REPO_NAME repository"
-#     REPO_ID=$(az repos show --repository "$REPO_NAME" --query id --output tsv --org "https://dev.azure.com/$ORG_NAME" --project "$PROJECT_NAME")
-#      if [ $? -eq 0 ]; then
-#         echo "The ID of the $REPO_NAME repository is $REPO_ID"
-#     else
-#         echo "Error during the reading of the property ID of the $REPO_NAME"
-#         exit 1
-#     fi
-#     echo "Creating approver count policy for the $BRANCH_NAME in $REPO_NAME repository"
-#     az repos policy approver-count create --branch-match-type $BRANCH_MATCH_TYPE --allow-downvotes $ALLOW_DOWNVOTES --blocking true --branch $BRANCH_NAME --creator-vote-counts $CREATOR_VOTE_COUNT --enabled true --minimum-approver-count $MINIMAL_APPROVER_COUNT --repository-id $REPO_ID --reset-on-source-push $RESET_ON_SOURCE_PUSH --project "$PROJECT_NAME" --organization "https://dev.azure.com/$ORG_NAME" --verbose
-#     if [ $? -eq 0 ]; then
-#         echo "Approver count policy was added to $BRANCH_NAME in $REPO_NAME repository"
-#     else
-#         echo "Approver count policy was not added to $BRANCH_NAME in $REPO_NAME repository"
-#         exit 1
-#     fi
-# done
-
-# az repos policy case-enforcement create --blocking {false, true}
-#                                         --enabled {false, true}
-#                                         --repository-id
-#                                         [--detect {false, true}]
-#                                         [--org]
-#                                         [--project]
-
-# az repos policy comment-required create --blocking {false, true}
-#                                         --branch
-#                                         --enabled {false, true}
-#                                         --repository-id
-#                                         [--branch-match-type {exact, prefix}]
-#                                         [--detect {false, true}]
-#                                         [--org]
-#                                         [--project]
-
-# az repos policy merge-strategy create --blocking {false, true}
-#                                       --branch
-#                                       --enabled {false, true}
-#                                       --repository-id
-#                                       [--allow-no-fast-forward {false, true}]
-#                                       [--allow-rebase {false, true}]
-#                                       [--allow-rebase-merge {false, true}]
-#                                       [--allow-squash {false, true}]
-#                                       [--branch-match-type {exact, prefix}]
-#                                       [--detect {false, true}]
-#                                       [--org]
-#                                       [--project]
-
-# az repos policy required-reviewer create --blocking {false, true}
-#                                          --branch
-#                                          --enabled {false, true}
-#                                          --message
-#                                          --repository-id
-#                                          --required-reviewer-ids
-#                                          [--branch-match-type {exact, prefix}]
-#                                          [--detect {false, true}]
-#                                          [--org]
-#                                          [--path-filter]
-#                                          [--project]
-
-# az repos policy work-item-linking create --blocking {false, true}
-#                                          --branch
-#                                          --enabled {false, true}
-#                                          --repository-id
-#                                          [--branch-match-type {exact, prefix}]
-#                                          [--detect {false, true}]
-#                                          [--org]
-#                                          [--project]
-
-# az repos policy build create --blocking {false, true}
-#                              --branch
-#                              --build-definition-id
-#                              --display-name
-#                              --enabled {false, true}
-#                              --manual-queue-only {false, true}
-#                              --queue-on-source-update-only {false, true}
-#                              --repository-id
-#                              --valid-duration
-#                              [--branch-match-type {exact, prefix}]
-#                              [--detect {false, true}]
-#                              [--org]
-#                              [--path-filter]
-#                              [--project]
 
 
 
@@ -780,17 +1009,6 @@ PROJECT_NAME=$(echo "$DEFAULT_JSON" | jq -r '.organization.project.name')
 
 
 
-
-
-
-# # echo "Enabling invitation of guest users in $ORG_NAME organization for $PROJECT_NAME project"
-# # This operation is currently not supported and has to be done manually
-# # RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://www.example.com)
-# # if [ "$RESPONSE" == "200" ]; then
-# #   echo "Curl was successful"
-# # else
-# #   echo "Curl failed with status code $RESPONSE"
-# # fi
 
 
 
