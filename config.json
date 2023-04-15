@@ -1,6 +1,6 @@
 {
     "organization": {
-        "name": "portaivan",
+        "name": "",
         "azure_active_directory": {
             "tenant_id": ""
         },
@@ -54,15 +54,18 @@
             ]
         },
         "policies": {
-            "third_party_application_access_via_oauth": true,
-            "ssh_authentication": true,
+            "disallow_third_party_application_access_via_oauth": false,
+            "disallow_ssh_authentication": false,
             "log_audit_events": true,
             "allow_public_projects": true,
             "additional_protections_public_package_registries": true,
             "enable_azure_active_directory_conditional_access_policy_validation": true,
-            "enable_external_guest_access": true,
+            "disallow_external_guest_access": false,
             "allow_team_and_project_administrators_to_invite_new_users": true,
-            "request_access": true
+            "request_access": {
+                "enable": false,
+                "url": ""
+            }
         }
     },
     "board": {
