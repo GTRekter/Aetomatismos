@@ -64,8 +64,20 @@
             "allow_team_and_project_administrators_to_invite_new_users": true,
             "request_access": {
                 "enable": false,
-                "url": ""
+                "url": "https://dev.azure.com/GTRekter"
             }
+        },
+        "settings": {
+            "disable_anonymous_access_badges": true,
+            "limit_variables_set_queue_time": false,
+            "limit_job_authorization_current_project_non_release_pipelines": false,
+            "limit_job_authorization_current_project_release_pipelines": false,
+            "protect_access_repositories_yaml_pipelines": false,
+            "disable_stage_chooser": false,
+            "disable_creation_classic_build_and_classic_release_pipelines": false,
+            "disable_built_in_tasks": false,
+            "disable_marketplace_tasks": false,
+            "disable_node_six_tasks": false
         }
     },
     "board": {
