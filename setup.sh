@@ -710,8 +710,9 @@ function connecting_organization_to_azure_active_directory {
 function configure_organization_policies {
     local ORG_NAME=$1
     local DEFAULT_JSON=$2
-    out "Configure organization policies"
-    THIRD_PARTY_ACCESS_VIA_OAUTH=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.third_party_application_access_via_oauth')
+    out "Configure $ORG_NAME organization policies"
+
+    THIRD_PARTY_ACCESS_VIA_OAUTH=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.disallow_third_party_application_access_via_oauth')
     out "Setting Third-party application access via OAuth to $THIRD_PARTY_ACCESS_VIA_OAUTH"
     RESPONSE=$(curl --silent \
             --request PATCH \
@@ -719,18 +720,16 @@ function configure_organization_policies {
             --header "Authorization: Basic $(echo -n :$PAT | base64)" \
             --header "Content-Type: application/json-patch+json" \
             --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$THIRD_PARTY_ACCESS_VIA_OAUTH'"}]' \
-            "https://vssps.dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.DisallowOAuthAuthentication?api-version=5.0-preview.1")
+            "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.DisallowOAuthAuthentication?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-    echo $RESPONSE_BODY
-    if [ $HTTP_STATUS != 200 ]; then
+    if [ $HTTP_STATUS != 204 ]; then
         out error "Error during the configuration of the Third-party application access via OAuth policy. $RESPONSE_BODY"
         exit 1;
     else
         out success "Configuration of the Third-party application access via OAuth policy was successful"
     fi
 
-    SSH_AUTHENTICATION=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.ssh_authentication')
+    SSH_AUTHENTICATION=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.disallow_ssh_authentication')
     out "Setting SSH authentication to $SSH_AUTHENTICATION"
     RESPONSE=$(curl --silent \
             --request PATCH \
@@ -738,11 +737,9 @@ function configure_organization_policies {
             --header "Authorization: Basic $(echo -n :$PAT | base64)" \
             --header "Content-Type: application/json-patch+json" \
             --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$SSH_AUTHENTICATION'"}]' \
-            "https://vssps.dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.DisallowSecureShell?api-version=5.0-preview.1")
-    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-    echo $RESPONSE_BODY
-    if [ $HTTP_STATUS != 200 ]; then
+            "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.DisallowSecureShell?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 204 ]; then
         out error "Error during the configuration of the SSH authentication policy. $RESPONSE_BODY"
         exit 1;
     else
@@ -757,18 +754,31 @@ function configure_organization_policies {
             --header "Authorization: Basic $(echo -n :$PAT | base64)" \
             --header "Content-Type: application/json-patch+json" \
             --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$LOG_AUDIT_EVENTS'"}]' \
-            "https://vssps.dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.LogAuditEvents?api-version=5.0-preview.1")
+            "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.LogAuditEvents?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-    echo $RESPONSE_BODY
-    if [ $HTTP_STATUS != 200 ]; then
+    if [ $HTTP_STATUS != 204 ]; then
         out error "Error during the configuration of the Log audit events policy. $RESPONSE_BODY"
         exit 1;
     else
         out success "Configuration of the Log audit events policy was successful"
     fi
 
-    # Allow public projects is different wip
+    ALLOW_PUBLIC_PROJECTS=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.allow_public_projects')
+    out "Setting Allow public projects to $ALLOW_PUBLIC_PROJECTS"
+    RESPONSE=$(curl --silent \
+            --request PATCH \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json-patch+json" \
+            --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ALLOW_PUBLIC_PROJECTS'"}]' \
+            "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.AllowAnonymousAccess?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    if [ $HTTP_STATUS != 204 ]; then
+        out error "Error during the configuration of the Allow public projects policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Allow public projects policy was successful"
+    fi
 
     ARTIFACTS_EXTERNAL_PACKAGE_PROTECTION_TOKEN=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.additional_protections_public_package_registries')
     out "Setting Additional protections for public package registries to $ARTIFACTS_EXTERNAL_PACKAGE_PROTECTION_TOKEN"
@@ -778,11 +788,9 @@ function configure_organization_policies {
             --header "Authorization: Basic $(echo -n :$PAT | base64)" \
             --header "Content-Type: application/json-patch+json" \
             --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ARTIFACTS_EXTERNAL_PACKAGE_PROTECTION_TOKEN'"}]' \
-            "https://vssps.dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.ArtifactsExternalPackageProtectionToken?api-version=5.0-preview.1")
+            "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.ArtifactsExternalPackageProtectionToken?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-    echo $RESPONSE_BODY
-    if [ $HTTP_STATUS != 200 ]; then
+    if [ $HTTP_STATUS != 204 ]; then
         out error "Error during the configuration of the Additional protections for public package registries policy. $RESPONSE_BODY"
         exit 1;
     else
@@ -797,11 +805,9 @@ function configure_organization_policies {
             --header "Authorization: Basic $(echo -n :$PAT | base64)" \
             --header "Content-Type: application/json-patch+json" \
             --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ENFORCE_AZURE_ACTIVE_DIRECTORY_CONDITIONAL_ACCESS'"}]' \
-            "https://vssps.dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.EnforceAADConditionalAccess?api-version=5.0-preview.1")
+            "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.EnforceAADConditionalAccess?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-    echo $RESPONSE_BODY
-    if [ $HTTP_STATUS != 200 ]; then
+    if [ $HTTP_STATUS != 204 ]; then
         out error "Error during the configuration of the Additional protections for public package registries policy. $RESPONSE_BODY"
         exit 1;
     else
@@ -816,18 +822,16 @@ function configure_organization_policies {
             --header "Authorization: Basic $(echo -n :$PAT | base64)" \
             --header "Content-Type: application/json-patch+json" \
             --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ALLOW_TEAM_ADMINS_INVITATIONS_ACCESS_TOKEN'"}]' \
-            "https://vssps.dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.AllowTeamAdminsInvitationsAccessToken?api-version=5.0-preview.1")
+            "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.AllowTeamAdminsInvitationsAccessToken?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-    echo $RESPONSE_BODY
-    if [ $HTTP_STATUS != 200 ]; then
+    if [ $HTTP_STATUS != 204 ]; then
         out error "Error during the configuration of the Additional protections for public package registries policy. $RESPONSE_BODY"
         exit 1;
     else
         out success "Configuration of the Additional protections for public package registries policy was successful"
     fi
 
-    ALLOW_GUEST_USERS=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.enable_external_guest_access')
+    ALLOW_GUEST_USERS=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.disallow_external_guest_access')
     out "Setting Allow guest users to $ALLOW_GUEST_USERS"
     RESPONSE=$(curl --silent \
             --request PATCH \
@@ -835,18 +839,65 @@ function configure_organization_policies {
             --header "Authorization: Basic $(echo -n :$PAT | base64)" \
             --header "Content-Type: application/json-patch+json" \
             --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ALLOW_GUEST_USERS'"}]' \
-            "https://vssps.dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.DisallowAadGuestUserAccess?api-version=5.0-preview.1")
+            "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.DisallowAadGuestUserAccess?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-    echo $RESPONSE_BODY
-    if [ $HTTP_STATUS != 200 ]; then
+    if [ $HTTP_STATUS != 204 ]; then
         out error "Error during the configuration of the Allow guest users policy. $RESPONSE_BODY"
         exit 1;
     else
         out success "Configuration of the Allow guest users policy was successful"
     fi
 
-    # request access is different wip
+    REQUEST_ACCESS=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.request_access.enable')
+    REQUEST_ACCESS_URL=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.request_access.url')
+    if  [  ! $REQUEST_ACCESS ]; then
+        out "Read organization ID. This property is needed to get a list of service endpoints"
+        RESPONSE=$(curl --silent \
+                --write-out "\n%{http_code}" \
+                --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+                --header "Content-Type: application/json" \
+                --data-raw '{"contributionIds": ["ms.vss-features.my-organizations-data-provider"],"dataProviderContext":{"properties":{}}}' \
+                "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+        HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+        RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+        if [ $HTTP_STATUS != 200 ]; then
+            out error "Failed to get the list of existing service endpoints. $RESPONSE"
+            exit 1;
+        else
+            out success "The list of existing service endpoints was succesfully retrieved"
+        fi
+        ORG_ID=$(echo "$RESPONSE_BODY" | jq '.dataProviders."ms.vss-features.my-organizations-data-provider".organizations[] | select(.name == "'"$ORG_NAME"'") | .id' | tr -d '"')
+        out "Setting $ORG_NAME organization url to $REQUEST_ACCESS_URL"
+        RESPONSE=$(curl --silent \
+                --request PATCH \
+                --write-out "\n%{http_code}" \
+                --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+                --header "Content-Type: application/json-patch+json" \
+                --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ALLOW_GUEST_USERS'"}]' \
+                "https://vssps.dev.azure.com/$ORG_NAME/_apis/Organization/Collections/$ORG_ID/Properties?api-version=5.0-preview.1")
+        HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+        if [ $HTTP_STATUS != 200 ]; then
+            out error "Error during the configuration of the organization url. $RESPONSE_BODY"
+            exit 1;
+        else
+            out success "Configuration of the organization url was successful"
+        fi
+    fi
+    out "Setting Request access to $REQUEST_ACCESS"
+    RESPONSE=$(curl --silent \
+            --request PATCH \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json-patch+json" \
+            --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$REQUEST_ACCESS'"}]' \
+            "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.AllowRequestAccessToken?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    if [ $HTTP_STATUS != 204 ]; then
+        out error "Error during the configuration of the Request access policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Request access policy was successful"
+    fi
 }
 
 
@@ -972,10 +1023,10 @@ function configure_organization_policies {
 #     echo $VERBOSE
 # done
 
-PAT=""
+PAT="" 
 DEFAULT_JSON=$(cat config.json)
 ORG_NAME=$(echo "$DEFAULT_JSON" | jq -r '.organization.name')
-authenticate_to_azure_devops $ORG_NAME
+# authenticate_to_azure_devops $ORG_NAME
 # add_users_to_organization $ORG_NAME "$DEFAULT_JSON"
 configure_organization_policies $ORG_NAME "$DEFAULT_JSON"
 # connecting_organization_to_azure_active_directory $ORG_NAME "$DEFAULT_JSON"
@@ -991,107 +1042,3 @@ PROJECT_NAME=$(echo "$DEFAULT_JSON" | jq -r '.organization.project.name')
 # assing_security_groups_to_environments $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
 # create_service_endpoints $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
 # create_agent_pools $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# REPO_NAMES=("Management" "Identity" "Connectivity" "Management pipeline" "Identity pipeline" "Management pipeline")
-
-# # set your personal access token
-# TOKEN="YOUR_TOKEN_HERE"
-
-# # create the repositories in the project 
-# for REPO_NAME in "${REPO_NAMES[@]}"
-# do
-#  echo "Creating $REPO_NAME repository..."
-#   curl --silent \
-#   --location \
-#   --request POST "https://dev.azure.com/$ORG_NAME/$PROJECT_NAME/_apis/git/repositories?api-version=6.0" \
-#   --header "Authorization: Basic $(echo -n :$TOKEN | base64)" \
-#   --header "Content-Type: application/json" \
-#   --data-raw "{\"name\":\"$REPO_NAME\"}"
-# done
-
-# # create branch policies for the repositories
-# # MAIN_POLICY_PAYLOAD=$(cat <<EOF
-# # {
-# #   "isEnabled": true,
-# #   "isBlocking": true,
-# #   "settings": {
-# #     "minimumApproverCount": 2,
-# #     "creatorVoteCounts": true,
-# #     "allowDownvotes": false,
-# #     "resetOnSourcePush": true,
-# #     "scope": {
-# #       "refName": "refs/heads/main",
-# #       "matchKind": "Exact"
-# #     }
-# #   }
-# # }
-# # EOF
-# # )
-# # curl --silent \
-# # --location \
-# # --request POST "https://dev.azure.com/$ORG_NAME/$PROJECT_NAME/_apis/policy/configurations?api-version=6.0" \
-# # --header "Authorization: Basic $(echo -n :$TOKEN | base64)" \
-# # --header "Content-Type: application/json" \
-# # --data-raw "$POLICY_PAYLOAD"
-
-# # RELEASES_POLICY_PAYLOAD=$(cat <<EOF
-# # {
-# #   "isEnabled": true,
-# #   "isBlocking": true,
-# #   "settings": {
-# #     "minimumApproverCount": 2,
-# #     "creatorVoteCounts": true,
-# #     "allowDownvotes": false,
-# #     "resetOnSourcePush": true,
-# #     "scope": {
-# #       "refName": "refs/heads/main",
-# #       "matchKind": "Exact"
-# #     }
-# #   }
-# # }
-# # EOF
-# # )
-# # curl --silent \
-# # --location \
-# # --request POST "https://dev.azure.com/$ORG_NAME/$PROJECT_NAME/_apis/policy/configurations?api-version=6.0" \
-# # --header "Authorization: Basic $(echo -n :$TOKEN | base64)" \
-# # --header "Content-Type: application/json" \
-# # --data-raw "$POLICY_PAYLOAD"
