@@ -899,6 +899,208 @@ function configure_organization_policies {
         out success "Configuration of the Request access policy was successful"
     fi
 }
+function configure_organization_settings {
+    local ORG_NAME=$1
+    local DEFAULT_JSON=$2
+    out "Configure $ORG_NAME organization settigns"
+
+    out "Read organization ID. This property is needed to get a list of service endpoints"
+    RESPONSE=$(curl --silent \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json" \
+            --data-raw '{"contributionIds": ["ms.vss-features.my-organizations-data-provider"],"dataProviderContext":{"properties":{}}}' \
+            "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Failed to get the list of existing service endpoints. $RESPONSE"
+        exit 1;
+    else
+        out success "The list of existing service endpoints was succesfully retrieved"
+    fi
+    ORG_ID=$(echo "$RESPONSE_BODY" | jq '.dataProviders."ms.vss-features.my-organizations-data-provider".organizations[] | select(.name == "'"$ORG_NAME"'") | .id' | tr -d '"')
+    
+    DISABLE_ANONYMOUS_ACCESS_BADGES=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.disable_anonymous_access_badges')
+    out "Setting Disable anonymous access badges to $DISABLE_ANONYMOUS_ACCESS_BADGES"
+    RESPONSE=$(curl --silent \
+        --request POST \
+        --write-out "\n%{http_code}" \
+        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+        --header "Content-Type: application/json" \
+        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"badgesArePublic":"'$DISABLE_ANONYMOUS_ACCESS_BADGES'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
+        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the configuration of the Disable anonymous access badges policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Disable anonymous access badges policy was successful"
+    fi
+
+    LIMIT_VARIABLES_SET_QUEUE_TIME=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.limit_variables_set_queue_time')
+    out "Setting Limit variables set at queue time to $LIMIT_VARIABLES_SET_QUEUE_TIME"
+    RESPONSE=$(curl --silent \
+        --request POST \
+        --write-out "\n%{http_code}" \
+        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+        --header "Content-Type: application/json" \
+        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"enforceSettableVar":"'$LIMIT_VARIABLES_SET_QUEUE_TIME'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
+        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the configuration of the Limit variables set at queue time policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Limit variables set at queue time policy was successful"
+    fi
+
+    LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_NON_RELEASE_PIPELINES=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.limit_job_authorization_current_project_non_release_pipelines')
+    out "Setting Limit job authorization scope to current project for non-release pipelines to $LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_NON_RELEASE_PIPELINES"
+    RESPONSE=$(curl --silent \
+        --request POST \
+        --write-out "\n%{http_code}" \
+        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+        --header "Content-Type: application/json" \
+        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"enforceJobAuthScope":"'$LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_NON_RELEASE_PIPELINES'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
+        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the configuration of the Limit job authorization scope to current project for non-release pipelines policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Limit job authorization scope to current project for non-release pipelines policy was successful"
+    fi
+
+    LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_RELEASE_PIPELINES=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.limit_job_authorization_current_project_release_pipelines')
+    out "Setting Limit job authorization scope to current project for release pipelines to $LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_NON_RELEASE_PIPELINES"
+    RESPONSE=$(curl --silent \
+        --request POST \
+        --write-out "\n%{http_code}" \
+        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+        --header "Content-Type: application/json" \
+        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"enforceJobAuthScopeForReleases":"'$LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_RELEASE_PIPELINES'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
+        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the configuration of the Limit job authorization scope to current project for release pipelines policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Limit job authorization scope to current project for release pipelines policy was successful"
+    fi
+
+    PROJECT_ACCESS_REPOSITORIES_YAML_PIPELINES=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.protect_access_repositories_yaml_pipelines')
+    out "Setting Protect access to repositories for YAML pipelines to $PROJECT_ACCESS_REPOSITORIES_YAML_PIPELINES"
+    RESPONSE=$(curl --silent \
+        --request POST \
+        --write-out "\n%{http_code}" \
+        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+        --header "Content-Type: application/json" \
+        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"enforceReferencedRepoScopedToken":"'$PROJECT_ACCESS_REPOSITORIES_YAML_PIPELINES'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
+        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the configuration of the Protect access to repositories for YAML pipelines policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Protect access to repositories for YAML pipelines policy was successful"
+    fi
+
+    DISABLE_STAGE_CHOOSER=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.disable_stage_chooser')
+    out "Setting Disable stage chooser to $DISABLE_STAGE_CHOOSER"
+    RESPONSE=$(curl --silent \
+        --request POST \
+        --write-out "\n%{http_code}" \
+        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+        --header "Content-Type: application/json" \
+        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"disableStageChooser":"'$DISABLE_STAGE_CHOOSER'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
+        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the configuration of the Disable stage chooser policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Disable stage chooser policy was successful"
+    fi
+
+    DISABLE_CREATION_CLASSIC_BUILD_AND_CLASSIC_RELEASE_PIPELINES=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.disable_creation_classic_build_and_classic_release_pipelines')
+    out "Setting Disable creation of classic build and classic release pipelines to $DISABLE_CREATION_CLASSIC_BUILD_AND_CLASSIC_RELEASE_PIPELINES"
+    RESPONSE=$(curl --silent \
+        --request POST \
+        --write-out "\n%{http_code}" \
+        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+        --header "Content-Type: application/json" \
+        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"disableClassicPipelineCreation":"'$DISABLE_CREATION_CLASSIC_BUILD_AND_CLASSIC_RELEASE_PIPELINES'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
+        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the configuration of the Disable creation of classic build and classic release pipelines policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Disable creation of classic build and classic release pipelines policy was successful"
+    fi
+
+    DISABLE_BUILD_IN_TASKS=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.disable_built_in_tasks')
+    out "Setting Disable built-in tasks to $DISABLE_BUILD_IN_TASKS"
+    RESPONSE=$(curl --silent \
+        --request POST \
+        --write-out "\n%{http_code}" \
+        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+        --header "Content-Type: application/json" \
+        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"disableInBoxTasksVar":"'$DISABLE_BUILD_IN_TASKS'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
+        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the configuration of the Disable built-in tasks policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Disable built-in tasks policy was successful"
+    fi
+
+    DISABLE_MARKETPLACE_TASKS=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.disable_marketplace_tasks')
+    out "Setting Disable marketplace tasks to $DISABLE_MARKETPLACE_TASKS"
+    RESPONSE=$(curl --silent \
+        --request POST \
+        --write-out "\n%{http_code}" \
+        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+        --header "Content-Type: application/json" \
+        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"disableMarketplaceTasksVar":"'$DISABLE_MARKETPLACE_TASKS'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
+        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the configuration of the Disable built-in tasks policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Disable built-in tasks policy was successful"
+    fi
+
+    DISABLE_NODE_SIX_TASKS=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.disable_node_six_tasks')
+    out "Setting Disable Node 6 tasks to $DISABLE_NODE_SIX_TASKS"
+    RESPONSE=$(curl --silent \
+        --request POST \
+        --write-out "\n%{http_code}" \
+        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+        --header "Content-Type: application/json" \
+        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"disableNode6Tasksvar":"'$DISABLE_NODE_SIX_TASKS'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
+        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the configuration of the Disable built-in tasks policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Disable built-in tasks policy was successful"
+    fi
+}
 
 
 # # echo "Enabling invitation of guest users in $ORG_NAME organization for $PROJECT_NAME project"
@@ -1023,12 +1225,13 @@ function configure_organization_policies {
 #     echo $VERBOSE
 # done
 
-PAT="" 
+PAT=""
 DEFAULT_JSON=$(cat config.json)
 ORG_NAME=$(echo "$DEFAULT_JSON" | jq -r '.organization.name')
 # authenticate_to_azure_devops $ORG_NAME
 # add_users_to_organization $ORG_NAME "$DEFAULT_JSON"
-configure_organization_policies $ORG_NAME "$DEFAULT_JSON"
+# configure_organization_policies $ORG_NAME "$DEFAULT_JSON"
+configure_organization_settings $ORG_NAME "$DEFAULT_JSON"
 # connecting_organization_to_azure_active_directory $ORG_NAME "$DEFAULT_JSON"
 # install_extensions_in_organization $ORG_NAME "$DEFAULT_JSON"
 PROJECT_NAME=$(echo "$DEFAULT_JSON" | jq -r '.organization.project.name')
