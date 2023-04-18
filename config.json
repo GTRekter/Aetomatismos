@@ -78,6 +78,13 @@
             "disable_built_in_tasks": false,
             "disable_marketplace_tasks": false,
             "disable_node_six_tasks": false
+        },
+        "repositories" : {
+            "enable_gravatar_images": true,
+            "default_branch_name": {
+                "enable": true,
+                "name": "main"
+            }
         }
     },
     "board": {
@@ -840,26 +847,71 @@
                 "name": "features/baseline"
             }
         ],
-        "policies": 
-            {
-                "approver_count" : [
-                    {
-                        "repository_name": "Azure_DNS",
-                        "branch_name": "releases/*",
-                        "branch_match_type": "prefix",
-                        "creator_vote_counts": false,
-                        "minimum_approver_count" : 4,
-                        "reset_on_source_push": true,
-                        "allow_downvotes": false
-                    }
-                ],
-                "case_enforcement": [],
-                "comment-required": [],
-                "merge-strategy": [],
-                "required-reviewer": [],
-                "work-item-linking": [],
-                "build": []
-            }
+        "policies": {
+            "approver_count" : [
+                {
+                    "repository_name": "Azure_DNS",
+                    "branch_name": "releases",
+                    "branch_match_type": "prefix",
+                    "creator_vote_counts": false,
+                    "minimum_approver_count" : 4,
+                    "reset_on_source_push": true,
+                    "allow_downvotes": false
+                }
+            ],
+            "case_enforcement": [
+                {
+                    "repository_name": "Azure_DNS"
+                }
+            ],
+            "comment_required": [
+                {
+                    "repository_name": "Azure_DNS",
+                    "branch_name": "releases",
+                    "branch_match_type": "prefix"
+                }
+            ],
+            "merge_strategy": [
+                {
+                    "repository_name": "Azure_DNS",
+                    "branch_name": "releases",
+                    "branch_match_type": "prefix",
+                    "allow_no_fast_forward": true,
+                    "allow_rebase": false,
+                    "allow_rebase_merge": false,
+                    "allow_squash": false
+                }
+            ],
+            "work_item_linking": [
+                {
+                    "repository_name": "Azure_DNS",
+                    "branch_name": "releases",
+                    "branch_match_type": "prefix"
+                }
+            ],
+            "required_reviewer": [
+                {
+                    "repository_name": "Azure_DNS",
+                    "branch_name": "releases",
+                    "branch_match_type": "prefix",
+                    "path_filter": "",
+                    "required_reviewer_emails": "porta.ivan@outlook.com",
+                    "message": "Ivan in required"
+                }
+            ],
+            "build": [
+                {
+                    "repository_name": "Azure_DNS",
+                    "branch_name": "releases",
+                    "branch_match_type": "prefix",
+                    "valid_duration": 30,
+                    "queue_on_source_update_only": true,
+                    "manual_queue_only": true,
+                    "display_name": "build validation",
+                    "build_definition_name": "Azure_DNS"
+                }
+            ]
+        }
     },
     "pipeline": {
         "service_endpoints": [
@@ -867,7 +919,7 @@
                 "azurerm": [
                     {
                         "name": "Azure Development",
-                        "tenant_id": "00434baa-68ec-4d73-b0a2-fec5bac28891",
+                        "tenant_id": "00434baa-68ec-4d73-b0a2-fec5bgtrekterac28891",
                         "subscription_name": "Microsoft VSES",
                         "subscription_id": "49bd11f3-09ce-4ecf-9f96-e026a292f054",
                         "service_principal_id": "a89b4f53-1622-4a47-866c-0ae919250a7f",
