@@ -5,6 +5,9 @@
 # author: Ivan Porta
 # date: 2021-05-18
 
+
+
+# ==================== GENERAL =========================
 function out {
     case "$1" in
         success)
@@ -32,6 +35,7 @@ function authenticate_to_azure_devops {
         exit 1
     fi
 }
+# ==================== ORGANIZATION ====================
 function add_users_to_organization {
     local ORG_NAME=$1
     local DEFAULT_JSON=$2
@@ -84,6 +88,526 @@ function install_extensions_in_organization {
         fi
     done
 }
+function connecting_organization_to_azure_active_directory {
+    local ORG_NAME=$1
+    local DEFAULT_JSON=$2
+    TENANT_ID=$(echo "$DEFAULT_JSON" | jq -r '.organization.azure_active_directory.tenant_id')
+    out "Connecting to $TENANT_ID tenant Azure Active Directory"
+
+    # This call just return the list of possible tenants
+    # out "Check if the $ORG_NAME organization is already connected to Azure Active Directory"
+    # RESPONSE=$(curl --silent \
+    #         --write-out "\n%{http_code}" \
+    #         --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+    #         --header "Content-Type: application/json" \
+    #         --data-raw '{"contributionIds":["ms.vss-admin-web.organization-admin-aad-user-tenants-data-provider"],"dataProviderContext":{"properties":{"sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/organizationAad","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"organizationAad","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
+    #         "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    # HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    # RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    # if [ $HTTP_STATUS != 200 ]; then
+    #     out error "Error during the retrieval of the list of existing Azure Active Directories"
+    #     exit 1;
+    # else
+    #     out success "The list of existing Azure Active Directories was retrieved successfully"
+    # fi
+    # if [[ $(echo "$RESPONSE_BODY" | jq -r '.dataProviders."ms.vss-admin-web.organization-admin-aad-user-tenants-data-provider".userTenantData.userTenants | length') -ge 1 ]]; then    
+    #     DISPLAY_NAME=$(echo "$RESPONSE_BODY" | jq -r '.dataProviders."ms.vss-admin-web.organization-admin-aad-user-tenants-data-provider".userTenantData.userTenants[0].displayName')
+    #     ID=$(echo "$RESPONSE_BODY" | jq -r '.dataProviders."ms.vss-admin-web.organization-admin-aad-user-tenants-data-provider".userTenantData.userTenants[0].id')
+    #     out warning "The $ORG_NAME organization is already connected to the $DISPLAY_NAME ($ID) Azure Active Directory. Skipping..."
+    #     return 1
+    # else
+    #     out "The $ORG_NAME organization is not connected to Azure Active Directory. Connecting..."
+    # fi
+    out "Check if the $ORG_NAME organization is already connected to Azure Active Directory"
+    RESPONSE=$(curl --silent \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json" \
+            "https://dev.azure.com/$ORG_NAME/_settings/organizationAad?__rt=fps&__ver=2")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the retrieval of the list of existing Azure Active Directories"
+        exit 1;
+    else
+        out success "The list of existing Azure Active Directories was retrieved successfully"
+    fi
+    if [[ $(echo "$RESPONSE_BODY" | jq -r '.fps.dataProviders.data."ms.vss-admin-web.organization-admin-aad-data-provider".orgnizationTenantData.domain') != "" ]]; then    
+        DISPLAY_NAME=$(echo "$RESPONSE_BODY" | jq -r '.fps.dataProviders.data."ms.vss-admin-web.organization-admin-aad-data-provider".orgnizationTenantData.displayName')
+        ID=$(echo "$RESPONSE_BODY" | jq -r '.fps.dataProviders.data."ms.vss-admin-web.organization-admin-aad-data-provider".orgnizationTenantData.id')
+        DOMAIN=$(echo "$RESPONSE_BODY" | jq -r '.fps.dataProviders.data."ms.vss-admin-web.organization-admin-aad-data-provider".orgnizationTenantData.domain')
+        out warning "The $ORG_NAME organization is already connected to the $DISPLAY_NAME ($ID) Azure Active Directory. Skipping..."
+        return 1
+    else
+        out "The $ORG_NAME organization is not connected to Azure Active Directory. Connecting..."
+    fi
+    RESPONSE=$(curl --silent \
+            --request PATCH \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json-patch+json" \
+            --data-raw '[{"from":"","op":2,"path":"/TenantId","value":"'$TENANT_ID'"}]' \
+            "https://vssps.dev.azure.com/$ORG_NAME/_apis/Organization/Organizations/Me?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    echo $RESPONSE_BODY
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the connection to Azure Active Directory. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Connection to Azure Active Directory was successful"
+    fi
+}
+function configure_organization_policies {
+    local ORG_NAME=$1
+    local DEFAULT_JSON=$2
+    out "Configure $ORG_NAME organization policies"
+
+    THIRD_PARTY_ACCESS_VIA_OAUTH=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.disallow_third_party_application_access_via_oauth')
+    out "Setting Third-party application access via OAuth to $THIRD_PARTY_ACCESS_VIA_OAUTH"
+    RESPONSE=$(curl --silent \
+            --request PATCH \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json-patch+json" \
+            --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$THIRD_PARTY_ACCESS_VIA_OAUTH'"}]' \
+            "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.DisallowOAuthAuthentication?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    if [ $HTTP_STATUS != 204 ]; then
+        out error "Error during the configuration of the Third-party application access via OAuth policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Third-party application access via OAuth policy was successful"
+    fi
+
+    SSH_AUTHENTICATION=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.disallow_ssh_authentication')
+    out "Setting SSH authentication to $SSH_AUTHENTICATION"
+    RESPONSE=$(curl --silent \
+            --request PATCH \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json-patch+json" \
+            --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$SSH_AUTHENTICATION'"}]' \
+            "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.DisallowSecureShell?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 204 ]; then
+        out error "Error during the configuration of the SSH authentication policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the SSH authentication policy was successful"
+    fi
+
+    LOG_AUDIT_EVENTS=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.log_audit_events')
+    out "Setting Log audit events to $LOG_AUDIT_EVENTS"
+    RESPONSE=$(curl --silent \
+            --request PATCH \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json-patch+json" \
+            --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$LOG_AUDIT_EVENTS'"}]' \
+            "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.LogAuditEvents?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    if [ $HTTP_STATUS != 204 ]; then
+        out error "Error during the configuration of the Log audit events policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Log audit events policy was successful"
+    fi
+
+    ALLOW_PUBLIC_PROJECTS=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.allow_public_projects')
+    out "Setting Allow public projects to $ALLOW_PUBLIC_PROJECTS"
+    RESPONSE=$(curl --silent \
+            --request PATCH \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json-patch+json" \
+            --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ALLOW_PUBLIC_PROJECTS'"}]' \
+            "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.AllowAnonymousAccess?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    if [ $HTTP_STATUS != 204 ]; then
+        out error "Error during the configuration of the Allow public projects policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Allow public projects policy was successful"
+    fi
+
+    ARTIFACTS_EXTERNAL_PACKAGE_PROTECTION_TOKEN=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.additional_protections_public_package_registries')
+    out "Setting Additional protections for public package registries to $ARTIFACTS_EXTERNAL_PACKAGE_PROTECTION_TOKEN"
+    RESPONSE=$(curl --silent \
+            --request PATCH \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json-patch+json" \
+            --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ARTIFACTS_EXTERNAL_PACKAGE_PROTECTION_TOKEN'"}]' \
+            "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.ArtifactsExternalPackageProtectionToken?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    if [ $HTTP_STATUS != 204 ]; then
+        out error "Error during the configuration of the Additional protections for public package registries policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Additional protections for public package registries policy was successful"
+    fi
+
+    ENFORCE_AZURE_ACTIVE_DIRECTORY_CONDITIONAL_ACCESS=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.enable_azure_active_directory_conditional_access_policy_validation')
+    out "Setting Additional protections for public package registries to $ENFORCE_AZURE_ACTIVE_DIRECTORY_CONDITIONAL_ACCESS"
+    RESPONSE=$(curl --silent \
+            --request PATCH \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json-patch+json" \
+            --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ENFORCE_AZURE_ACTIVE_DIRECTORY_CONDITIONAL_ACCESS'"}]' \
+            "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.EnforceAADConditionalAccess?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    if [ $HTTP_STATUS != 204 ]; then
+        out error "Error during the configuration of the Additional protections for public package registries policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Additional protections for public package registries policy was successful"
+    fi
+
+    ALLOW_TEAM_ADMINS_INVITATIONS_ACCESS_TOKEN=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.allow_team_and_project_administrators_to_invite_new_users')
+    out "Setting Additional protections for public package registries to $ALLOW_TEAM_ADMINS_INVITATIONS_ACCESS_TOKEN"
+    RESPONSE=$(curl --silent \
+            --request PATCH \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json-patch+json" \
+            --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ALLOW_TEAM_ADMINS_INVITATIONS_ACCESS_TOKEN'"}]' \
+            "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.AllowTeamAdminsInvitationsAccessToken?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    if [ $HTTP_STATUS != 204 ]; then
+        out error "Error during the configuration of the Additional protections for public package registries policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Additional protections for public package registries policy was successful"
+    fi
+
+    ALLOW_GUEST_USERS=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.disallow_external_guest_access')
+    out "Setting Allow guest users to $ALLOW_GUEST_USERS"
+    RESPONSE=$(curl --silent \
+            --request PATCH \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json-patch+json" \
+            --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ALLOW_GUEST_USERS'"}]' \
+            "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.DisallowAadGuestUserAccess?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    if [ $HTTP_STATUS != 204 ]; then
+        out error "Error during the configuration of the Allow guest users policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Allow guest users policy was successful"
+    fi
+
+    REQUEST_ACCESS=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.request_access.enable')
+    REQUEST_ACCESS_URL=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.request_access.url')
+    if  [  ! $REQUEST_ACCESS ]; then
+        out "Read organization ID. This property is needed to get a list of service endpoints"
+        RESPONSE=$(curl --silent \
+                --write-out "\n%{http_code}" \
+                --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+                --header "Content-Type: application/json" \
+                --data-raw '{"contributionIds": ["ms.vss-features.my-organizations-data-provider"],"dataProviderContext":{"properties":{}}}' \
+                "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+        HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+        RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+        if [ $HTTP_STATUS != 200 ]; then
+            out error "Failed to get the list of existing service endpoints. $RESPONSE"
+            exit 1;
+        else
+            out success "The list of existing service endpoints was succesfully retrieved"
+        fi
+        ORG_ID=$(echo "$RESPONSE_BODY" | jq '.dataProviders."ms.vss-features.my-organizations-data-provider".organizations[] | select(.name == "'"$ORG_NAME"'") | .id' | tr -d '"')
+        out "Setting $ORG_NAME organization url to $REQUEST_ACCESS_URL"
+        RESPONSE=$(curl --silent \
+                --request PATCH \
+                --write-out "\n%{http_code}" \
+                --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+                --header "Content-Type: application/json-patch+json" \
+                --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ALLOW_GUEST_USERS'"}]' \
+                "https://vssps.dev.azure.com/$ORG_NAME/_apis/Organization/Collections/$ORG_ID/Properties?api-version=5.0-preview.1")
+        HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+        if [ $HTTP_STATUS != 200 ]; then
+            out error "Error during the configuration of the organization url. $RESPONSE_BODY"
+            exit 1;
+        else
+            out success "Configuration of the organization url was successful"
+        fi
+    fi
+    out "Setting Request access to $REQUEST_ACCESS"
+    RESPONSE=$(curl --silent \
+            --request PATCH \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json-patch+json" \
+            --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$REQUEST_ACCESS'"}]' \
+            "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.AllowRequestAccessToken?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    if [ $HTTP_STATUS != 204 ]; then
+        out error "Error during the configuration of the Request access policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Request access policy was successful"
+    fi
+}
+function configure_organization_settings {
+    local ORG_NAME=$1
+    local DEFAULT_JSON=$2
+    out "Configure $ORG_NAME organization settigns"
+
+    out "Read organization ID. This property is needed to get a list of service endpoints"
+    RESPONSE=$(curl --silent \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json" \
+            --data-raw '{"contributionIds": ["ms.vss-features.my-organizations-data-provider"],"dataProviderContext":{"properties":{}}}' \
+            "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Failed to get the list of existing service endpoints. $RESPONSE"
+        exit 1;
+    else
+        out success "The list of existing service endpoints was succesfully retrieved"
+    fi
+    ORG_ID=$(echo "$RESPONSE_BODY" | jq '.dataProviders."ms.vss-features.my-organizations-data-provider".organizations[] | select(.name == "'"$ORG_NAME"'") | .id' | tr -d '"')
+    
+    DISABLE_ANONYMOUS_ACCESS_BADGES=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.disable_anonymous_access_badges')
+    out "Setting Disable anonymous access badges to $DISABLE_ANONYMOUS_ACCESS_BADGES"
+    RESPONSE=$(curl --silent \
+        --request POST \
+        --write-out "\n%{http_code}" \
+        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+        --header "Content-Type: application/json" \
+        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"badgesArePublic":"'$DISABLE_ANONYMOUS_ACCESS_BADGES'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
+        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the configuration of the Disable anonymous access badges policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Disable anonymous access badges policy was successful"
+    fi
+
+    LIMIT_VARIABLES_SET_QUEUE_TIME=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.limit_variables_set_queue_time')
+    out "Setting Limit variables set at queue time to $LIMIT_VARIABLES_SET_QUEUE_TIME"
+    RESPONSE=$(curl --silent \
+        --request POST \
+        --write-out "\n%{http_code}" \
+        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+        --header "Content-Type: application/json" \
+        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"enforceSettableVar":"'$LIMIT_VARIABLES_SET_QUEUE_TIME'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
+        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the configuration of the Limit variables set at queue time policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Limit variables set at queue time policy was successful"
+    fi
+
+    LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_NON_RELEASE_PIPELINES=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.limit_job_authorization_current_project_non_release_pipelines')
+    out "Setting Limit job authorization scope to current project for non-release pipelines to $LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_NON_RELEASE_PIPELINES"
+    RESPONSE=$(curl --silent \
+        --request POST \
+        --write-out "\n%{http_code}" \
+        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+        --header "Content-Type: application/json" \
+        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"enforceJobAuthScope":"'$LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_NON_RELEASE_PIPELINES'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
+        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the configuration of the Limit job authorization scope to current project for non-release pipelines policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Limit job authorization scope to current project for non-release pipelines policy was successful"
+    fi
+
+    LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_RELEASE_PIPELINES=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.limit_job_authorization_current_project_release_pipelines')
+    out "Setting Limit job authorization scope to current project for release pipelines to $LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_NON_RELEASE_PIPELINES"
+    RESPONSE=$(curl --silent \
+        --request POST \
+        --write-out "\n%{http_code}" \
+        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+        --header "Content-Type: application/json" \
+        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"enforceJobAuthScopeForReleases":"'$LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_RELEASE_PIPELINES'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
+        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the configuration of the Limit job authorization scope to current project for release pipelines policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Limit job authorization scope to current project for release pipelines policy was successful"
+    fi
+
+    PROJECT_ACCESS_REPOSITORIES_YAML_PIPELINES=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.protect_access_repositories_yaml_pipelines')
+    out "Setting Protect access to repositories for YAML pipelines to $PROJECT_ACCESS_REPOSITORIES_YAML_PIPELINES"
+    RESPONSE=$(curl --silent \
+        --request POST \
+        --write-out "\n%{http_code}" \
+        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+        --header "Content-Type: application/json" \
+        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"enforceReferencedRepoScopedToken":"'$PROJECT_ACCESS_REPOSITORIES_YAML_PIPELINES'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
+        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the configuration of the Protect access to repositories for YAML pipelines policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Protect access to repositories for YAML pipelines policy was successful"
+    fi
+
+    DISABLE_STAGE_CHOOSER=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.disable_stage_chooser')
+    out "Setting Disable stage chooser to $DISABLE_STAGE_CHOOSER"
+    RESPONSE=$(curl --silent \
+        --request POST \
+        --write-out "\n%{http_code}" \
+        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+        --header "Content-Type: application/json" \
+        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"disableStageChooser":"'$DISABLE_STAGE_CHOOSER'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
+        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the configuration of the Disable stage chooser policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Disable stage chooser policy was successful"
+    fi
+
+    DISABLE_CREATION_CLASSIC_BUILD_AND_CLASSIC_RELEASE_PIPELINES=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.disable_creation_classic_build_and_classic_release_pipelines')
+    out "Setting Disable creation of classic build and classic release pipelines to $DISABLE_CREATION_CLASSIC_BUILD_AND_CLASSIC_RELEASE_PIPELINES"
+    RESPONSE=$(curl --silent \
+        --request POST \
+        --write-out "\n%{http_code}" \
+        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+        --header "Content-Type: application/json" \
+        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"disableClassicPipelineCreation":"'$DISABLE_CREATION_CLASSIC_BUILD_AND_CLASSIC_RELEASE_PIPELINES'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
+        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the configuration of the Disable creation of classic build and classic release pipelines policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Disable creation of classic build and classic release pipelines policy was successful"
+    fi
+
+    DISABLE_BUILD_IN_TASKS=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.disable_built_in_tasks')
+    out "Setting Disable built-in tasks to $DISABLE_BUILD_IN_TASKS"
+    RESPONSE=$(curl --silent \
+        --request POST \
+        --write-out "\n%{http_code}" \
+        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+        --header "Content-Type: application/json" \
+        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"disableInBoxTasksVar":"'$DISABLE_BUILD_IN_TASKS'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
+        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the configuration of the Disable built-in tasks policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Disable built-in tasks policy was successful"
+    fi
+
+    DISABLE_MARKETPLACE_TASKS=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.disable_marketplace_tasks')
+    out "Setting Disable marketplace tasks to $DISABLE_MARKETPLACE_TASKS"
+    RESPONSE=$(curl --silent \
+        --request POST \
+        --write-out "\n%{http_code}" \
+        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+        --header "Content-Type: application/json" \
+        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"disableMarketplaceTasksVar":"'$DISABLE_MARKETPLACE_TASKS'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
+        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the configuration of the Disable built-in tasks policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Disable built-in tasks policy was successful"
+    fi
+
+    DISABLE_NODE_SIX_TASKS=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.disable_node_six_tasks')
+    out "Setting Disable Node 6 tasks to $DISABLE_NODE_SIX_TASKS"
+    RESPONSE=$(curl --silent \
+        --request POST \
+        --write-out "\n%{http_code}" \
+        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+        --header "Content-Type: application/json" \
+        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"disableNode6Tasksvar":"'$DISABLE_NODE_SIX_TASKS'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
+        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    if [ $HTTP_STATUS != 200 ]; then
+        out error "Error during the configuration of the Disable built-in tasks policy. $RESPONSE_BODY"
+        exit 1;
+    else
+        out success "Configuration of the Disable built-in tasks policy was successful"
+    fi
+}
+function configure_organization_repositories {
+    local ORG_NAME=$1
+    local DEFAULT_JSON=$2
+    out "Configuring organization repositories"
+    out warning "Microsoft doesn't have public APIs to configure this secion and it's using  ASP.NET __RequestVerificationToken to validate the requests. Because of that, this configuration is not supported yet."
+
+    # response=$(curl --header "Authorization: Basic $(echo -n :$PAT | base64)" -s "https://gtrekter.visualstudio.com/_settings/repositories")
+    # echo $response
+    # # Extract value of __RequestVerificationToken input field using grep
+    # token=$(echo "$response" | grep -oP '(?<=<input type="hidden" name="__RequestVerificationToken" value=")[^"]+')
+    # # Print the token value
+    # echo "$token"
+
+    # NOT CURRENTLY AVAILABLE DUE TO MISSING REQUEST TOKEN
+    # ENABLE_GRAVATAR_IMAGES=$(echo "$DEFAULT_JSON" | jq -r '.organization.repositories.enable_gravatar_images')
+    # out "Setting Enable Gravatar images to $ENABLE_GRAVATAR_IMAGES"
+    # RESPONSE=$(curl --silent \
+    #         --request POST -vvv \
+    #         --write-out "\n%{http_code}" \
+    #         --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+    #         --header "Content-Type: application/json" \
+    #         --data-raw '{repositoryId: "00000000-0000-0000-0000-000000000000", "option": {"key":"GravatarEnabled","value":'$ENABLE_GRAVATAR_IMAGES',"textValue":null}, __RequestVerificationToken: "'$token'"}' \
+    #         "https://dev.azure.com/$ORG_NAME/_api/_versioncontrol/UpdateRepositoryOption?__v=5&repositoryId=00000000-0000-0000-0000-000000000000")
+    
+    # echo $RESPONSE
+    # HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    # RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    # if [ $HTTP_STATUS != 200 ]; then
+    #     out error "Error during the configuration of the Enable Gravatar images policy. $RESPONSE_BODY"
+    #     exit 1;
+    # else
+    #     out success "Configuration of the Enable Gravatar images policy was successful"
+    # fi
+
+    # ENABLE_DEFAULT_BRANCH_NAME=$(echo "$DEFAULT_JSON" | jq -r '.organization.repositories.default_branch_name.enable')
+    # DEFAULT_BRANCH_NAME=$(echo "$DEFAULT_JSON" | jq -r '.organization.repositories.default_branch_name.name')
+    # out "Setting Default branch name to $DEFAULT_BRANCH_NAME"
+
+    # echo '{"option": {"key":"DefaultBranchName","value":'$ENABLE_DEFAULT_BRANCH_NAME',"textValue":"'$DEFAULT_BRANCH_NAME'"}}'
+    # RESPONSE=$(curl --silent \
+    #         --request POST \
+    #         --write-out "\n%{http_code}" \
+    #         --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+    #         --header "Content-Type: application/json" \
+    #         --data-raw '{"option": {"key":"DefaultBranchName","value":'$ENABLE_DEFAULT_BRANCH_NAME',"textValue":"'$DEFAULT_BRANCH_NAME'"}}' \
+    #         "https://dev.azure.com/$ORG_NAME/_api/_versioncontrol/UpdateRepositoryOption?__v=5&repositoryId=00000000-0000-0000-0000-000000000000")
+    # HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    # RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    # if [ $HTTP_STATUS != 200 ]; then
+    #     out error "Error during the configuration of the Default branch name to $DEFAULT_BRANCH_NAME. $RESPONSE_BODY"
+    #     exit 1;
+    # else
+    #     out success "Configuration of the Default branch name to $DEFAULT_BRANCH_NAME was successful"
+    # fi
+} # WIP (NOT AVAILABLE YET)
+# ==================== PROJECT =========================
 function create_project {
     local ORG_NAME=$1
     local PROJECT_NAME=$2
@@ -637,581 +1161,239 @@ function create_agent_pools {
         done
     done 
 }
-function connecting_organization_to_azure_active_directory {
-    local ORG_NAME=$1
-    local DEFAULT_JSON=$2
-    TENANT_ID=$(echo "$DEFAULT_JSON" | jq -r '.organization.azure_active_directory.tenant_id')
-    out "Connecting to $TENANT_ID tenant Azure Active Directory"
+function create_branch_protection_policies {
+    echo "Creating branch protection policies in the $PROJECT_NAME project"
 
-    # This call just return the list of possible tenants
-    # out "Check if the $ORG_NAME organization is already connected to Azure Active Directory"
-    # RESPONSE=$(curl --silent \
-    #         --write-out "\n%{http_code}" \
-    #         --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-    #         --header "Content-Type: application/json" \
-    #         --data-raw '{"contributionIds":["ms.vss-admin-web.organization-admin-aad-user-tenants-data-provider"],"dataProviderContext":{"properties":{"sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/organizationAad","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"organizationAad","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
-    #         "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
-    # HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    # RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-    # if [ $HTTP_STATUS != 200 ]; then
-    #     out error "Error during the retrieval of the list of existing Azure Active Directories"
-    #     exit 1;
-    # else
-    #     out success "The list of existing Azure Active Directories was retrieved successfully"
-    # fi
-    # if [[ $(echo "$RESPONSE_BODY" | jq -r '.dataProviders."ms.vss-admin-web.organization-admin-aad-user-tenants-data-provider".userTenantData.userTenants | length') -ge 1 ]]; then    
-    #     DISPLAY_NAME=$(echo "$RESPONSE_BODY" | jq -r '.dataProviders."ms.vss-admin-web.organization-admin-aad-user-tenants-data-provider".userTenantData.userTenants[0].displayName')
-    #     ID=$(echo "$RESPONSE_BODY" | jq -r '.dataProviders."ms.vss-admin-web.organization-admin-aad-user-tenants-data-provider".userTenantData.userTenants[0].id')
-    #     out warning "The $ORG_NAME organization is already connected to the $DISPLAY_NAME ($ID) Azure Active Directory. Skipping..."
-    #     return 1
-    # else
-    #     out "The $ORG_NAME organization is not connected to Azure Active Directory. Connecting..."
-    # fi
-    out "Check if the $ORG_NAME organization is already connected to Azure Active Directory"
-    RESPONSE=$(curl --silent \
-            --write-out "\n%{http_code}" \
-            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-            --header "Content-Type: application/json" \
-            "https://dev.azure.com/$ORG_NAME/_settings/organizationAad?__rt=fps&__ver=2")
-    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-    if [ $HTTP_STATUS != 200 ]; then
-        out error "Error during the retrieval of the list of existing Azure Active Directories"
-        exit 1;
-    else
-        out success "The list of existing Azure Active Directories was retrieved successfully"
-    fi
-    if [[ $(echo "$RESPONSE_BODY" | jq -r '.fps.dataProviders.data."ms.vss-admin-web.organization-admin-aad-data-provider".orgnizationTenantData.domain') != "" ]]; then    
-        DISPLAY_NAME=$(echo "$RESPONSE_BODY" | jq -r '.fps.dataProviders.data."ms.vss-admin-web.organization-admin-aad-data-provider".orgnizationTenantData.displayName')
-        ID=$(echo "$RESPONSE_BODY" | jq -r '.fps.dataProviders.data."ms.vss-admin-web.organization-admin-aad-data-provider".orgnizationTenantData.id')
-        DOMAIN=$(echo "$RESPONSE_BODY" | jq -r '.fps.dataProviders.data."ms.vss-admin-web.organization-admin-aad-data-provider".orgnizationTenantData.domain')
-        out warning "The $ORG_NAME organization is already connected to the $DISPLAY_NAME ($ID) Azure Active Directory. Skipping..."
-        return 1
-    else
-        out "The $ORG_NAME organization is not connected to Azure Active Directory. Connecting..."
-    fi
-    RESPONSE=$(curl --silent \
-            --request PATCH \
-            --write-out "\n%{http_code}" \
-            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-            --header "Content-Type: application/json-patch+json" \
-            --data-raw '[{"from":"","op":2,"path":"/TenantId","value":"'$TENANT_ID'"}]' \
-            "https://vssps.dev.azure.com/$ORG_NAME/_apis/Organization/Organizations/Me?api-version=5.0-preview.1")
-    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-    echo $RESPONSE_BODY
-    if [ $HTTP_STATUS != 200 ]; then
-        out error "Error during the connection to Azure Active Directory. $RESPONSE_BODY"
-        exit 1;
-    else
-        out success "Connection to Azure Active Directory was successful"
-    fi
-}
-function configure_organization_policies {
-    local ORG_NAME=$1
-    local DEFAULT_JSON=$2
-    out "Configure $ORG_NAME organization policies"
-
-    THIRD_PARTY_ACCESS_VIA_OAUTH=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.disallow_third_party_application_access_via_oauth')
-    out "Setting Third-party application access via OAuth to $THIRD_PARTY_ACCESS_VIA_OAUTH"
-    RESPONSE=$(curl --silent \
-            --request PATCH \
-            --write-out "\n%{http_code}" \
-            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-            --header "Content-Type: application/json-patch+json" \
-            --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$THIRD_PARTY_ACCESS_VIA_OAUTH'"}]' \
-            "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.DisallowOAuthAuthentication?api-version=5.0-preview.1")
-    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    if [ $HTTP_STATUS != 204 ]; then
-        out error "Error during the configuration of the Third-party application access via OAuth policy. $RESPONSE_BODY"
-        exit 1;
-    else
-        out success "Configuration of the Third-party application access via OAuth policy was successful"
-    fi
-
-    SSH_AUTHENTICATION=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.disallow_ssh_authentication')
-    out "Setting SSH authentication to $SSH_AUTHENTICATION"
-    RESPONSE=$(curl --silent \
-            --request PATCH \
-            --write-out "\n%{http_code}" \
-            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-            --header "Content-Type: application/json-patch+json" \
-            --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$SSH_AUTHENTICATION'"}]' \
-            "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.DisallowSecureShell?api-version=5.0-preview.1")
-    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE") 
-    if [ $HTTP_STATUS != 204 ]; then
-        out error "Error during the configuration of the SSH authentication policy. $RESPONSE_BODY"
-        exit 1;
-    else
-        out success "Configuration of the SSH authentication policy was successful"
-    fi
-
-    LOG_AUDIT_EVENTS=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.log_audit_events')
-    out "Setting Log audit events to $LOG_AUDIT_EVENTS"
-    RESPONSE=$(curl --silent \
-            --request PATCH \
-            --write-out "\n%{http_code}" \
-            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-            --header "Content-Type: application/json-patch+json" \
-            --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$LOG_AUDIT_EVENTS'"}]' \
-            "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.LogAuditEvents?api-version=5.0-preview.1")
-    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    if [ $HTTP_STATUS != 204 ]; then
-        out error "Error during the configuration of the Log audit events policy. $RESPONSE_BODY"
-        exit 1;
-    else
-        out success "Configuration of the Log audit events policy was successful"
-    fi
-
-    ALLOW_PUBLIC_PROJECTS=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.allow_public_projects')
-    out "Setting Allow public projects to $ALLOW_PUBLIC_PROJECTS"
-    RESPONSE=$(curl --silent \
-            --request PATCH \
-            --write-out "\n%{http_code}" \
-            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-            --header "Content-Type: application/json-patch+json" \
-            --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ALLOW_PUBLIC_PROJECTS'"}]' \
-            "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.AllowAnonymousAccess?api-version=5.0-preview.1")
-    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    if [ $HTTP_STATUS != 204 ]; then
-        out error "Error during the configuration of the Allow public projects policy. $RESPONSE_BODY"
-        exit 1;
-    else
-        out success "Configuration of the Allow public projects policy was successful"
-    fi
-
-    ARTIFACTS_EXTERNAL_PACKAGE_PROTECTION_TOKEN=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.additional_protections_public_package_registries')
-    out "Setting Additional protections for public package registries to $ARTIFACTS_EXTERNAL_PACKAGE_PROTECTION_TOKEN"
-    RESPONSE=$(curl --silent \
-            --request PATCH \
-            --write-out "\n%{http_code}" \
-            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-            --header "Content-Type: application/json-patch+json" \
-            --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ARTIFACTS_EXTERNAL_PACKAGE_PROTECTION_TOKEN'"}]' \
-            "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.ArtifactsExternalPackageProtectionToken?api-version=5.0-preview.1")
-    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    if [ $HTTP_STATUS != 204 ]; then
-        out error "Error during the configuration of the Additional protections for public package registries policy. $RESPONSE_BODY"
-        exit 1;
-    else
-        out success "Configuration of the Additional protections for public package registries policy was successful"
-    fi
-
-    ENFORCE_AZURE_ACTIVE_DIRECTORY_CONDITIONAL_ACCESS=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.enable_azure_active_directory_conditional_access_policy_validation')
-    out "Setting Additional protections for public package registries to $ENFORCE_AZURE_ACTIVE_DIRECTORY_CONDITIONAL_ACCESS"
-    RESPONSE=$(curl --silent \
-            --request PATCH \
-            --write-out "\n%{http_code}" \
-            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-            --header "Content-Type: application/json-patch+json" \
-            --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ENFORCE_AZURE_ACTIVE_DIRECTORY_CONDITIONAL_ACCESS'"}]' \
-            "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.EnforceAADConditionalAccess?api-version=5.0-preview.1")
-    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    if [ $HTTP_STATUS != 204 ]; then
-        out error "Error during the configuration of the Additional protections for public package registries policy. $RESPONSE_BODY"
-        exit 1;
-    else
-        out success "Configuration of the Additional protections for public package registries policy was successful"
-    fi
-
-    ALLOW_TEAM_ADMINS_INVITATIONS_ACCESS_TOKEN=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.allow_team_and_project_administrators_to_invite_new_users')
-    out "Setting Additional protections for public package registries to $ALLOW_TEAM_ADMINS_INVITATIONS_ACCESS_TOKEN"
-    RESPONSE=$(curl --silent \
-            --request PATCH \
-            --write-out "\n%{http_code}" \
-            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-            --header "Content-Type: application/json-patch+json" \
-            --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ALLOW_TEAM_ADMINS_INVITATIONS_ACCESS_TOKEN'"}]' \
-            "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.AllowTeamAdminsInvitationsAccessToken?api-version=5.0-preview.1")
-    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    if [ $HTTP_STATUS != 204 ]; then
-        out error "Error during the configuration of the Additional protections for public package registries policy. $RESPONSE_BODY"
-        exit 1;
-    else
-        out success "Configuration of the Additional protections for public package registries policy was successful"
-    fi
-
-    ALLOW_GUEST_USERS=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.disallow_external_guest_access')
-    out "Setting Allow guest users to $ALLOW_GUEST_USERS"
-    RESPONSE=$(curl --silent \
-            --request PATCH \
-            --write-out "\n%{http_code}" \
-            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-            --header "Content-Type: application/json-patch+json" \
-            --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ALLOW_GUEST_USERS'"}]' \
-            "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.DisallowAadGuestUserAccess?api-version=5.0-preview.1")
-    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    if [ $HTTP_STATUS != 204 ]; then
-        out error "Error during the configuration of the Allow guest users policy. $RESPONSE_BODY"
-        exit 1;
-    else
-        out success "Configuration of the Allow guest users policy was successful"
-    fi
-
-    REQUEST_ACCESS=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.request_access.enable')
-    REQUEST_ACCESS_URL=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.request_access.url')
-    if  [  ! $REQUEST_ACCESS ]; then
-        out "Read organization ID. This property is needed to get a list of service endpoints"
-        RESPONSE=$(curl --silent \
-                --write-out "\n%{http_code}" \
-                --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-                --header "Content-Type: application/json" \
-                --data-raw '{"contributionIds": ["ms.vss-features.my-organizations-data-provider"],"dataProviderContext":{"properties":{}}}' \
-                "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
-        HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-        RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-        if [ $HTTP_STATUS != 200 ]; then
-            out error "Failed to get the list of existing service endpoints. $RESPONSE"
-            exit 1;
-        else
-            out success "The list of existing service endpoints was succesfully retrieved"
-        fi
-        ORG_ID=$(echo "$RESPONSE_BODY" | jq '.dataProviders."ms.vss-features.my-organizations-data-provider".organizations[] | select(.name == "'"$ORG_NAME"'") | .id' | tr -d '"')
-        out "Setting $ORG_NAME organization url to $REQUEST_ACCESS_URL"
-        RESPONSE=$(curl --silent \
-                --request PATCH \
-                --write-out "\n%{http_code}" \
-                --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-                --header "Content-Type: application/json-patch+json" \
-                --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ALLOW_GUEST_USERS'"}]' \
-                "https://vssps.dev.azure.com/$ORG_NAME/_apis/Organization/Collections/$ORG_ID/Properties?api-version=5.0-preview.1")
-        HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-        if [ $HTTP_STATUS != 200 ]; then
-            out error "Error during the configuration of the organization url. $RESPONSE_BODY"
-            exit 1;
-        else
-            out success "Configuration of the organization url was successful"
-        fi
-    fi
-    out "Setting Request access to $REQUEST_ACCESS"
-    RESPONSE=$(curl --silent \
-            --request PATCH \
-            --write-out "\n%{http_code}" \
-            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-            --header "Content-Type: application/json-patch+json" \
-            --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$REQUEST_ACCESS'"}]' \
-            "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.AllowRequestAccessToken?api-version=5.0-preview.1")
-    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    if [ $HTTP_STATUS != 204 ]; then
-        out error "Error during the configuration of the Request access policy. $RESPONSE_BODY"
-        exit 1;
-    else
-        out success "Configuration of the Request access policy was successful"
-    fi
-}
-function configure_organization_settings {
-    local ORG_NAME=$1
-    local DEFAULT_JSON=$2
-    out "Configure $ORG_NAME organization settigns"
-
-    out "Read organization ID. This property is needed to get a list of service endpoints"
-    RESPONSE=$(curl --silent \
-            --write-out "\n%{http_code}" \
-            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-            --header "Content-Type: application/json" \
-            --data-raw '{"contributionIds": ["ms.vss-features.my-organizations-data-provider"],"dataProviderContext":{"properties":{}}}' \
-            "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
-    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-    if [ $HTTP_STATUS != 200 ]; then
-        out error "Failed to get the list of existing service endpoints. $RESPONSE"
-        exit 1;
-    else
-        out success "The list of existing service endpoints was succesfully retrieved"
-    fi
-    ORG_ID=$(echo "$RESPONSE_BODY" | jq '.dataProviders."ms.vss-features.my-organizations-data-provider".organizations[] | select(.name == "'"$ORG_NAME"'") | .id' | tr -d '"')
+    # echo "Creating Approver count policies"
+    # I need to check if already exists, otherwise the cretion will fail
+    # for APPROVER_COUNT_POLICY in $(echo "$DEFAULT_JSON" | jq -r '.repository.policies.approver_count[] | @base64'); do
+    #     APPROVER_COUNT_POLICY_JSON=$(echo "$APPROVER_COUNT_POLICY" | base64 --decode | jq -r '.')
+    #     REPO_NAME=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.repository_name')
+    #     BRANCH_NAME=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.branch_name')
+    #     BRANCH_MATCH_TYPE=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.branch_match_type')
+    #     ALLOW_DOWNVOTES=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.allow_downvotes')
+    #     CREATOR_VOTE_COUNT=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.creator_vote_counts')
+    #     MINIMAL_APPROVER_COUNT=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.minimum_approver_count')
+    #     RESET_ON_SOURCE_PUSH=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.reset_on_source_push')
+    #     out "Reading ID of the $REPO_NAME repository"
+    #     REPO_ID=$(az repos show --repository "$REPO_NAME" --query id --output tsv --org "https://dev.azure.com/$ORG_NAME" --project "$PROJECT_NAME")
+    #     if [ $? -eq 0 ]; then
+    #         out success "The ID of the $REPO_NAME repository is $REPO_ID"
+    #     else
+    #         out error  "Error during the reading of the property ID of the $REPO_NAME"
+    #         exit 1
+    #     fi
+    #     out "Creating approver count policy for the $BRANCH_NAME in $REPO_NAME repository"
+    #     az repos policy approver-count create --branch-match-type $BRANCH_MATCH_TYPE --allow-downvotes $ALLOW_DOWNVOTES --blocking true --branch $BRANCH_NAME --creator-vote-counts $CREATOR_VOTE_COUNT --enabled true --minimum-approver-count $MINIMAL_APPROVER_COUNT --repository-id $REPO_ID --reset-on-source-push $RESET_ON_SOURCE_PUSH --project "$PROJECT_NAME" --organization "https://dev.azure.com/$ORG_NAME" --verbose
+    #     if [ $? -eq 0 ]; then
+    #         out success "Approver count policy was added to $BRANCH_NAME in $REPO_NAME repository"
+    #     else
+    #         out error "Approver count policy was not added to $BRANCH_NAME in $REPO_NAME repository"
+    #         exit 1
+    #     fi
+    # done
     
-    DISABLE_ANONYMOUS_ACCESS_BADGES=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.disable_anonymous_access_badges')
-    out "Setting Disable anonymous access badges to $DISABLE_ANONYMOUS_ACCESS_BADGES"
-    RESPONSE=$(curl --silent \
-        --request POST \
-        --write-out "\n%{http_code}" \
-        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-        --header "Content-Type: application/json" \
-        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"badgesArePublic":"'$DISABLE_ANONYMOUS_ACCESS_BADGES'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
-        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
-    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-    if [ $HTTP_STATUS != 200 ]; then
-        out error "Error during the configuration of the Disable anonymous access badges policy. $RESPONSE_BODY"
-        exit 1;
-    else
-        out success "Configuration of the Disable anonymous access badges policy was successful"
-    fi
+    # out "Creating case enforcement policies"
+    # not working
+    # for CASE_ENFORCEMENT_POLICY in $(echo "$DEFAULT_JSON" | jq -r '.repository.policies.case_enforcement[] | @base64'); do
+    #     CASE_ENFORCEMENT_POLICY_JSON=$(echo "$CASE_ENFORCEMENT_POLICY" | base64 --decode | jq -r '.')
+    #     REPO_NAME=$(echo "$CASE_ENFORCEMENT_POLICY_JSON" | jq -r '.repository_name')
+    #     out "Reading ID of the $REPO_NAME repository"
+    #     REPO_ID=$(az repos show --repository "$REPO_NAME" --query id --output tsv --org "https://dev.azure.com/$ORG_NAME" --project "$PROJECT_NAME")
+    #     if [ $? -eq 0 ]; then
+    #         out success "The ID of the $REPO_NAME repository is $REPO_ID"
+    #     else
+    #         out error  "Error during the reading of the property ID of the $REPO_NAME"
+    #         exit 1
+    #     fi
+    #     out "Creating case enforcement policy for the $REPO_NAME repository"
+    #     az repos policy case-enforcement  create --blocking true --enabled true --repository-id $REPO_ID --project "$PROJECT_NAME" --organization "https://dev.azure.com/$ORG_NAME" --verbose
+    #     if [ $? -eq 0 ]; then
+    #         out success "Case enforcement policy was added to the $REPO_NAME repository"
+    #     else
+    #         out error "Case enforcement policy was not added to the $REPO_NAME repository"
+    #         exit 1
+    #     fi
+    # done
 
-    LIMIT_VARIABLES_SET_QUEUE_TIME=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.limit_variables_set_queue_time')
-    out "Setting Limit variables set at queue time to $LIMIT_VARIABLES_SET_QUEUE_TIME"
-    RESPONSE=$(curl --silent \
-        --request POST \
-        --write-out "\n%{http_code}" \
-        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-        --header "Content-Type: application/json" \
-        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"enforceSettableVar":"'$LIMIT_VARIABLES_SET_QUEUE_TIME'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
-        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
-    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-    if [ $HTTP_STATUS != 200 ]; then
-        out error "Error during the configuration of the Limit variables set at queue time policy. $RESPONSE_BODY"
-        exit 1;
-    else
-        out success "Configuration of the Limit variables set at queue time policy was successful"
-    fi
+    # out "Creating comment required policies"
+    # I need to check if already exists, otherwise the cretion will fail
+    # for COMMENT_REQUIRED_POLICY in $(echo "$DEFAULT_JSON" | jq -r '.repository.policies.comment_required[] | @base64'); do
+    #     COMMENT_REQUIRED_POLICY_JSON=$(echo "$COMMENT_REQUIRED_POLICY" | base64 --decode | jq -r '.')
+    #     REPO_NAME=$(echo "$COMMENT_REQUIRED_POLICY_JSON" | jq -r '.repository_name')
+    #     BRANCH_NAME=$(echo "$COMMENT_REQUIRED_POLICY_JSON" | jq -r '.branch_name')
+    #     BRANCH_MATCH_TYPE=$(echo "$COMMENT_REQUIRED_POLICY_JSON" | jq -r '.branch_match_type')
+    #     out "Reading ID of the $REPO_NAME repository"
+    #     REPO_ID=$(az repos show --repository "$REPO_NAME" --query id --output tsv --org "https://dev.azure.com/$ORG_NAME" --project "$PROJECT_NAME")
+    #     if [ $? -eq 0 ]; then
+    #         out success "The ID of the $REPO_NAME repository is $REPO_ID"
+    #     else
+    #         out error  "Error during the reading of the property ID of the $REPO_NAME"
+    #         exit 1
+    #     fi
+    #     out "Creating comment required policy for the $BRANCH_NAME in $REPO_NAME repository"
+    #     az repos policy comment-required create --branch-match-type $BRANCH_MATCH_TYPE --branch $BRANCH_NAME --blocking true --enabled true --repository-id $REPO_ID --project "$PROJECT_NAME" --organization "https://dev.azure.com/$ORG_NAME" --verbose
+    #     if [ $? -eq 0 ]; then
+    #         out success "Comment required policy was added to $BRANCH_NAME in $REPO_NAME repository"
+    #     else
+    #         out error "Comment required policy was not added to $BRANCH_NAME in $REPO_NAME repository"
+    #         exit 1
+    #     fi
+    # done
 
-    LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_NON_RELEASE_PIPELINES=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.limit_job_authorization_current_project_non_release_pipelines')
-    out "Setting Limit job authorization scope to current project for non-release pipelines to $LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_NON_RELEASE_PIPELINES"
-    RESPONSE=$(curl --silent \
-        --request POST \
-        --write-out "\n%{http_code}" \
-        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-        --header "Content-Type: application/json" \
-        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"enforceJobAuthScope":"'$LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_NON_RELEASE_PIPELINES'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
-        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
-    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-    if [ $HTTP_STATUS != 200 ]; then
-        out error "Error during the configuration of the Limit job authorization scope to current project for non-release pipelines policy. $RESPONSE_BODY"
-        exit 1;
-    else
-        out success "Configuration of the Limit job authorization scope to current project for non-release pipelines policy was successful"
-    fi
+    # out "Creating merge strategy policies"
+    # # I need to check if already exists, otherwise the cretion will fail
+    # for MERGE_STRATEGY_POLICY in $(echo "$DEFAULT_JSON" | jq -r '.repository.policies.merge_strategy[] | @base64'); do
+    #     MERGE_STRATEGY_POLICY_JSON=$(echo "$MERGE_STRATEGY_POLICY" | base64 --decode | jq -r '.')
+    #     REPO_NAME=$(echo "$MERGE_STRATEGY_POLICY_JSON" | jq -r '.repository_name')
+    #     BRANCH_NAME=$(echo "$MERGE_STRATEGY_POLICY_JSON" | jq -r '.branch_name')
+    #     BRANCH_MATCH_TYPE=$(echo "$MERGE_STRATEGY_POLICY_JSON" | jq -r '.branch_match_type')
+    #     ALLOW_NO_FAST_FORWARD=$(echo "$MERGE_STRATEGY_POLICY_JSON" | jq -r '.allow_no_fast_forward')
+    #     ALLOW_REBASE=$(echo "$MERGE_STRATEGY_POLICY_JSON" | jq -r '.allow_rebase')
+    #     ALLOW_REBASE_MERGE=$(echo "$MERGE_STRATEGY_POLICY_JSON" | jq -r '.allow_rebase_merge')
+    #     ALLOW_SQUASH=$(echo "$MERGE_STRATEGY_POLICY_JSON" | jq -r '.allow_squash')
+    #     out "Reading ID of the $REPO_NAME repository"
+    #     REPO_ID=$(az repos show --repository "$REPO_NAME" --query id --output tsv --org "https://dev.azure.com/$ORG_NAME" --project "$PROJECT_NAME")
+    #     if [ $? -eq 0 ]; then
+    #         out success "The ID of the $REPO_NAME repository is $REPO_ID"
+    #     else
+    #         out error  "Error during the reading of the property ID of the $REPO_NAME"
+    #         exit 1
+    #     fi
+    #     out "Creating merge strategy policy for the $BRANCH_NAME in $REPO_NAME repository"
+    #     az repos policy merge-strategy create \
+    #         --allow-no-fast-forward $ALLOW_NO_FAST_FORWARD \
+    #         --allow-rebase $ALLOW_REBASE \
+    #         --allow-rebase-merge $ALLOW_REBASE_MERGE \
+    #         --allow-squash $ALLOW_SQUASH \
+    #         --branch-match-type $BRANCH_MATCH_TYPE \
+    #         --branch $BRANCH_NAME \
+    #         --blocking true \
+    #         --enabled true \
+    #         --repository-id $REPO_ID \
+    #         --project "$PROJECT_NAME" \
+    #         --organization "https://dev.azure.com/$ORG_NAME" --verbose
+    #     if [ $? -eq 0 ]; then
+    #         out success "Comment required policy was added to $BRANCH_NAME in $REPO_NAME repository"
+    #     else
+    #         out error "Comment required policy was not added to $BRANCH_NAME in $REPO_NAME repository"
+    #         exit 1
+    #     fi
+    # done
 
-    LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_RELEASE_PIPELINES=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.limit_job_authorization_current_project_release_pipelines')
-    out "Setting Limit job authorization scope to current project for release pipelines to $LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_NON_RELEASE_PIPELINES"
-    RESPONSE=$(curl --silent \
-        --request POST \
-        --write-out "\n%{http_code}" \
-        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-        --header "Content-Type: application/json" \
-        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"enforceJobAuthScopeForReleases":"'$LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_RELEASE_PIPELINES'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
-        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
-    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-    if [ $HTTP_STATUS != 200 ]; then
-        out error "Error during the configuration of the Limit job authorization scope to current project for release pipelines policy. $RESPONSE_BODY"
-        exit 1;
-    else
-        out success "Configuration of the Limit job authorization scope to current project for release pipelines policy was successful"
-    fi
+    # out "Creating work-item linking policies"
+    # # I need to check if already exists, otherwise the cretion will fail
+    # for WORK_ITEM_LINKING_POLICY in $(echo "$DEFAULT_JSON" | jq -r '.repository.policies.work_item_linking[] | @base64'); do
+    #     WORK_ITEM_LINKING_POLICY_JSON=$(echo "$WORK_ITEM_LINKING_POLICY" | base64 --decode | jq -r '.')
+    #     REPO_NAME=$(echo "$WORK_ITEM_LINKING_POLICY_JSON" | jq -r '.repository_name')
+    #     BRANCH_NAME=$(echo "$WORK_ITEM_LINKING_POLICY_JSON" | jq -r '.branch_name')
+    #     BRANCH_MATCH_TYPE=$(echo "$WORK_ITEM_LINKING_POLICY_JSON" | jq -r '.branch_match_type')
+    #     out "Reading ID of the $REPO_NAME repository"
+    #     REPO_ID=$(az repos show --repository "$REPO_NAME" --query id --output tsv --org "https://dev.azure.com/$ORG_NAME" --project "$PROJECT_NAME")
+    #     if [ $? -eq 0 ]; then
+    #         out success "The ID of the $REPO_NAME repository is $REPO_ID"
+    #     else
+    #         out error  "Error during the reading of the property ID of the $REPO_NAME"
+    #         exit 1
+    #     fi
+    #     out "Creating work-item linking policy for the $BRANCH_NAME in $REPO_NAME repository"
+    #     az repos policy work-item-linking create --branch-match-type $BRANCH_MATCH_TYPE --branch $BRANCH_NAME --blocking true --enabled true --repository-id $REPO_ID --project "$PROJECT_NAME" --organization "https://dev.azure.com/$ORG_NAME" --verbose
+    #     if [ $? -eq 0 ]; then
+    #         out success "Work-item linking policy was added to $BRANCH_NAME in $REPO_NAME repository"
+    #     else
+    #         out error "Work-item linking policy was not added to $BRANCH_NAME in $REPO_NAME repository"
+    #         exit 1
+    #     fi
+    # done
 
-    PROJECT_ACCESS_REPOSITORIES_YAML_PIPELINES=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.protect_access_repositories_yaml_pipelines')
-    out "Setting Protect access to repositories for YAML pipelines to $PROJECT_ACCESS_REPOSITORIES_YAML_PIPELINES"
-    RESPONSE=$(curl --silent \
-        --request POST \
-        --write-out "\n%{http_code}" \
-        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-        --header "Content-Type: application/json" \
-        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"enforceReferencedRepoScopedToken":"'$PROJECT_ACCESS_REPOSITORIES_YAML_PIPELINES'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
-        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
-    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-    if [ $HTTP_STATUS != 200 ]; then
-        out error "Error during the configuration of the Protect access to repositories for YAML pipelines policy. $RESPONSE_BODY"
-        exit 1;
-    else
-        out success "Configuration of the Protect access to repositories for YAML pipelines policy was successful"
-    fi
+    # out "Creating required reviewers policies"
+    # # I need to check if already exists, otherwise the cretion will fail
+    # for REQUIRED_REVIEWERS_POLICY in $(echo "$DEFAULT_JSON" | jq -r '.repository.policies.required_reviewer[] | @base64'); do
+    #     REQUIRED_REVIEWERS_POLICY_JSON=$(echo "$REQUIRED_REVIEWERS_POLICY" | base64 --decode | jq -r '.')
+    #     REPO_NAME=$(echo "$REQUIRED_REVIEWERS_POLICY_JSON" | jq -r '.repository_name')
+    #     BRANCH_NAME=$(echo "$REQUIRED_REVIEWERS_POLICY_JSON" | jq -r '.branch_name')
+    #     BRANCH_MATCH_TYPE=$(echo "$REQUIRED_REVIEWERS_POLICY_JSON" | jq -r '.branch_match_type')
+    #     REQUIRED_REVIEWER_EMAILS=$(echo "$REQUIRED_REVIEWERS_POLICY_JSON" | jq -r '.required_reviewer_emails') 
+    #     MESSAGE=$(echo "$REQUIRED_REVIEWERS_POLICY_JSON" | jq -r '.message')
+    #     PATH_FILTER=$(echo "$REQUIRED_REVIEWERS_POLICY_JSON" | jq -r '.path_filter')
+    #     out "Reading ID of the $REPO_NAME repository"
+    #     REPO_ID=$(az repos show --repository "$REPO_NAME" --query id --output tsv --org "https://dev.azure.com/$ORG_NAME" --project "$PROJECT_NAME")
+    #     if [ $? -eq 0 ]; then
+    #         out success "The ID of the $REPO_NAME repository is $REPO_ID"
+    #     else
+    #         out error  "Error during the reading of the property ID of the $REPO_NAME"
+    #         exit 1
+    #     fi
+    #     out "Creating required reviewers policy for the $BRANCH_NAME in $REPO_NAME repository"
+    #     az repos policy required-reviewer create \
+    #         --branch-match-type $BRANCH_MATCH_TYPE \
+    #         --branch $BRANCH_NAME \
+    #         --blocking true \
+    #         --message "$MESSAGE" \
+    #         --path-filter "$PATH_FILTER" \
+    #         --enabled true \
+    #         --required-reviewer-ids "$REQUIRED_REVIEWER_EMAILS" \
+    #         --repository-id $REPO_ID \
+    #         --project "$PROJECT_NAME" \
+    #         --organization "https://dev.azure.com/$ORG_NAME" --verbose
+    #     if [ $? -eq 0 ]; then
+    #         out success "Required reviewers policy was added to $BRANCH_NAME in $REPO_NAME repository"
+    #     else
+    #         out error "Required reviewers policy was not added to $BRANCH_NAME in $REPO_NAME repository"
+    #         exit 1
+    #     fi
+    # done
 
-    DISABLE_STAGE_CHOOSER=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.disable_stage_chooser')
-    out "Setting Disable stage chooser to $DISABLE_STAGE_CHOOSER"
-    RESPONSE=$(curl --silent \
-        --request POST \
-        --write-out "\n%{http_code}" \
-        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-        --header "Content-Type: application/json" \
-        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"disableStageChooser":"'$DISABLE_STAGE_CHOOSER'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
-        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
-    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-    if [ $HTTP_STATUS != 200 ]; then
-        out error "Error during the configuration of the Disable stage chooser policy. $RESPONSE_BODY"
-        exit 1;
-    else
-        out success "Configuration of the Disable stage chooser policy was successful"
-    fi
-
-    DISABLE_CREATION_CLASSIC_BUILD_AND_CLASSIC_RELEASE_PIPELINES=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.disable_creation_classic_build_and_classic_release_pipelines')
-    out "Setting Disable creation of classic build and classic release pipelines to $DISABLE_CREATION_CLASSIC_BUILD_AND_CLASSIC_RELEASE_PIPELINES"
-    RESPONSE=$(curl --silent \
-        --request POST \
-        --write-out "\n%{http_code}" \
-        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-        --header "Content-Type: application/json" \
-        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"disableClassicPipelineCreation":"'$DISABLE_CREATION_CLASSIC_BUILD_AND_CLASSIC_RELEASE_PIPELINES'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
-        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
-    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-    if [ $HTTP_STATUS != 200 ]; then
-        out error "Error during the configuration of the Disable creation of classic build and classic release pipelines policy. $RESPONSE_BODY"
-        exit 1;
-    else
-        out success "Configuration of the Disable creation of classic build and classic release pipelines policy was successful"
-    fi
-
-    DISABLE_BUILD_IN_TASKS=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.disable_built_in_tasks')
-    out "Setting Disable built-in tasks to $DISABLE_BUILD_IN_TASKS"
-    RESPONSE=$(curl --silent \
-        --request POST \
-        --write-out "\n%{http_code}" \
-        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-        --header "Content-Type: application/json" \
-        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"disableInBoxTasksVar":"'$DISABLE_BUILD_IN_TASKS'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
-        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
-    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-    if [ $HTTP_STATUS != 200 ]; then
-        out error "Error during the configuration of the Disable built-in tasks policy. $RESPONSE_BODY"
-        exit 1;
-    else
-        out success "Configuration of the Disable built-in tasks policy was successful"
-    fi
-
-    DISABLE_MARKETPLACE_TASKS=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.disable_marketplace_tasks')
-    out "Setting Disable marketplace tasks to $DISABLE_MARKETPLACE_TASKS"
-    RESPONSE=$(curl --silent \
-        --request POST \
-        --write-out "\n%{http_code}" \
-        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-        --header "Content-Type: application/json" \
-        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"disableMarketplaceTasksVar":"'$DISABLE_MARKETPLACE_TASKS'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
-        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
-    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-    if [ $HTTP_STATUS != 200 ]; then
-        out error "Error during the configuration of the Disable built-in tasks policy. $RESPONSE_BODY"
-        exit 1;
-    else
-        out success "Configuration of the Disable built-in tasks policy was successful"
-    fi
-
-    DISABLE_NODE_SIX_TASKS=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.disable_node_six_tasks')
-    out "Setting Disable Node 6 tasks to $DISABLE_NODE_SIX_TASKS"
-    RESPONSE=$(curl --silent \
-        --request POST \
-        --write-out "\n%{http_code}" \
-        --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-        --header "Content-Type: application/json" \
-        --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"disableNode6Tasksvar":"'$DISABLE_NODE_SIX_TASKS'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
-        "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
-    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-    if [ $HTTP_STATUS != 200 ]; then
-        out error "Error during the configuration of the Disable built-in tasks policy. $RESPONSE_BODY"
-        exit 1;
-    else
-        out success "Configuration of the Disable built-in tasks policy was successful"
-    fi
+    out "Creating build policies"
+    # I need to check if already exists, otherwise the cretion will fail
+    for BUILD_POLICY in $(echo "$DEFAULT_JSON" | jq -r '.repository.policies.build[] | @base64'); do
+        BUILD_POLICY_JSON=$(echo "$BUILD_POLICY" | base64 --decode | jq -r '.')
+        REPO_NAME=$(echo "$BUILD_POLICY_JSON" | jq -r '.repository_name')
+        BRANCH_NAME=$(echo "$BUILD_POLICY_JSON" | jq -r '.branch_name')
+        BRANCH_MATCH_TYPE=$(echo "$BUILD_POLICY_JSON" | jq -r '.branch_match_type')
+        VALID_DURATION=$(echo "$BUILD_POLICY_JSON" | jq -r '.valid_duration') 
+        QUEUE_ON_SOURCE_UPDATE_ONLY=$(echo "$BUILD_POLICY_JSON" | jq -r '.queue_on_source_update_only')
+        MANUAL_QUEUE_ONLY=$(echo "$BUILD_POLICY_JSON" | jq -r '.manual_queue_only')
+        DISPLAY_NAME=$(echo "$BUILD_POLICY_JSON" | jq -r '.display_name')
+        BUILD_DEFINITION_NAME=$(echo "$BUILD_POLICY_JSON" | jq -r '.build_definition_name')
+        out "Reading ID of the $REPO_NAME repository"
+        REPO_ID=$(az repos show --repository "$REPO_NAME" --query id --output tsv --org "https://dev.azure.com/$ORG_NAME" --project "$PROJECT_NAME")
+        if [ $? -eq 0 ]; then
+            out success "The ID of the $REPO_NAME repository is $REPO_ID"
+        else
+            out error  "Error during the reading of the property ID of the $REPO_NAME"
+            exit 1
+        fi
+        out "Reading ID of the $BUILD_DEFINITION_NAME build definition"
+        BUILD_DEFINITION_ID=$(az pipelines build definition show --query id --output tsv --org "https://dev.azure.com/$ORG_NAME" --project "$PROJECT_NAME" --name $BUILD_DEFINITION_NAME)
+        if [ $? -eq 0 ]; then
+            out success "The ID of the $BUILD_DEFINITION_NAME build definition is $BUILD_DEFINITION_ID"
+        else
+            out error  "Error during the reading of the property ID of the $BUILD_DEFINITION_NAME"
+            exit 1
+        fi
+        out "Creating required reviewers policy for the $BRANCH_NAME in $REPO_NAME repository"
+        az repos policy build create \
+            --branch-match-type $BRANCH_MATCH_TYPE \
+            --branch $BRANCH_NAME \
+            --blocking true \
+            --build-definition-id "$BUILD_DEFINITION_ID" \
+            --display-name "$DISPLAY_NAME" \
+            --manual-queue-only $MANUAL_QUEUE_ONLY \
+            --queue-on-source-update-only $QUEUE_ON_SOURCE_UPDATE_ONLY \
+            --valid-duration $VALID_DURATION \
+            --enabled true \
+            --repository-id $REPO_ID \
+            --project "$PROJECT_NAME" \
+            --organization "https://dev.azure.com/$ORG_NAME" --verbose
+        if [ $? -eq 0 ]; then
+            out success "Required reviewers policy was added to $BRANCH_NAME in $REPO_NAME repository"
+        else
+            out error "Required reviewers policy was not added to $BRANCH_NAME in $REPO_NAME repository"
+            exit 1
+        fi
+    done
 }
-
-
-# # echo "Enabling invitation of guest users in $ORG_NAME organization for $PROJECT_NAME project"
-# # This operation is currently not supported and has to be done manually
-# # RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://www.example.com)
-# # if [ "$RESPONSE" == "200" ]; then
-# #   echo "Curl was successful"
-# # else
-# #   echo "Curl failed with status code $RESPONSE"
-# # fi
-
-
-
-
-
-# function create_branch_protection_policies {
-#     echo "Creating branch protection policies in the $PROJECT_NAME project"
-#     echo "Creating Approver count policies"
-#     for APPROVER_COUNT_POLICY in $(echo "$DEFAULT_JSON" | jq -r '.repository.policies.approver_count[] | @base64'); do
-#         APPROVER_COUNT_POLICY_JSON=$(echo "$APPROVER_COUNT_POLICY" | base64 --decode | jq -r '.')
-#         REPO_NAME=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.repository_name')
-#         BRANCH_NAME=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.branch_name')
-#         BRANCH_MATCH_TYPE=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.branch_match_type')
-#         ALLOW_DOWNVOTES=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.allow_downvotes')
-#         CREATOR_VOTE_COUNT=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.creator_vote_counts')
-#         MINIMAL_APPROVER_COUNT=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.minimum_approver_count')
-#         RESET_ON_SOURCE_PUSH=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.reset_on_source_push')
-#         echo "Reading ID of the $REPO_NAME repository"
-#         REPO_ID=$(az repos show --repository "$REPO_NAME" --query id --output tsv --org "https://dev.azure.com/$ORG_NAME" --project "$PROJECT_NAME")
-#          if [ $? -eq 0 ]; then
-#             echo "The ID of the $REPO_NAME repository is $REPO_ID"
-#         else
-#             echo "Error during the reading of the property ID of the $REPO_NAME"
-#             exit 1
-#         fi
-#         echo "Creating approver count policy for the $BRANCH_NAME in $REPO_NAME repository"
-#         az repos policy approver-count create --branch-match-type $BRANCH_MATCH_TYPE --allow-downvotes $ALLOW_DOWNVOTES --blocking true --branch $BRANCH_NAME --creator-vote-counts $CREATOR_VOTE_COUNT --enabled true --minimum-approver-count $MINIMAL_APPROVER_COUNT --repository-id $REPO_ID --reset-on-source-push $RESET_ON_SOURCE_PUSH --project "$PROJECT_NAME" --organization "https://dev.azure.com/$ORG_NAME" --verbose
-#         if [ $? -eq 0 ]; then
-#             echo "Approver count policy was added to $BRANCH_NAME in $REPO_NAME repository"
-#         else
-#             echo "Approver count policy was not added to $BRANCH_NAME in $REPO_NAME repository"
-#             exit 1
-#         fi
-#     done
-
-#     az repos policy case-enforcement create --blocking {false, true}
-#                                             --enabled {false, true}
-#                                             --repository-id
-#                                             [--detect {false, true}]
-#                                             [--org]
-#                                             [--project]
-
-#     az repos policy comment-required create --blocking {false, true}
-#                                             --branch
-#                                             --enabled {false, true}
-#                                             --repository-id
-#                                             [--branch-match-type {exact, prefix}]
-#                                             [--detect {false, true}]
-#                                             [--org]
-#                                             [--project]
-
-#     az repos policy merge-strategy create --blocking {false, true}
-#                                           --branch
-#                                           --enabled {false, true}
-#                                           --repository-id
-#                                           [--allow-no-fast-forward {false, true}]
-#                                           [--allow-rebase {false, true}]
-#                                           [--allow-rebase-merge {false, true}]
-#                                           [--allow-squash {false, true}]
-#                                           [--branch-match-type {exact, prefix}]
-#                                           [--detect {false, true}]
-#                                           [--org]
-#                                           [--project]
-
-#     az repos policy required-reviewer create --blocking {false, true}
-#                                              --branch
-#                                              --enabled {false, true}
-#                                              --message
-#                                              --repository-id
-#                                              --required-reviewer-ids
-#                                              [--branch-match-type {exact, prefix}]
-#                                              [--detect {false, true}]
-#                                              [--org]
-#                                              [--path-filter]
-#                                              [--project]
-
-#     az repos policy work-item-linking create --blocking {false, true}
-#                                              --branch
-#                                              --enabled {false, true}
-#                                              --repository-id
-#                                              [--branch-match-type {exact, prefix}]
-#                                              [--detect {false, true}]
-#                                              [--org]
-#                                              [--project]
-
-#     az repos policy build create --blocking {false, true}
-#                                  --branch
-#                                  --build-definition-id
-#                                  --display-name
-#                                  --enabled {false, true}
-#                                  --manual-queue-only {false, true}
-#                                  --queue-on-source-update-only {false, true}
-#                                  --repository-id
-#                                  --valid-duration
-#                                  [--branch-match-type {exact, prefix}]
-#                                  [--detect {false, true}]
-#                                  [--org]
-#                                  [--path-filter]
-#                                  [--project]
-# }
-
 
 # TODO
 # VERBOSE=false
@@ -1228,13 +1410,18 @@ function configure_organization_settings {
 PAT=""
 DEFAULT_JSON=$(cat config.json)
 ORG_NAME=$(echo "$DEFAULT_JSON" | jq -r '.organization.name')
+
+# ==================== GENERAL =========================
 # authenticate_to_azure_devops $ORG_NAME
+# ==================== ORGANIZATION ====================
 # add_users_to_organization $ORG_NAME "$DEFAULT_JSON"
 # configure_organization_policies $ORG_NAME "$DEFAULT_JSON"
-configure_organization_settings $ORG_NAME "$DEFAULT_JSON"
+# configure_organization_settings $ORG_NAME "$DEFAULT_JSON"
 # connecting_organization_to_azure_active_directory $ORG_NAME "$DEFAULT_JSON"
 # install_extensions_in_organization $ORG_NAME "$DEFAULT_JSON"
+# configure_organization_repositories $ORG_NAME "$DEFAULT_JSON"
 PROJECT_NAME=$(echo "$DEFAULT_JSON" | jq -r '.organization.project.name')
+# ==================== PROJECT =========================
 # create_project $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
 # create_security_groups $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON" # To fix
 # create_repositories $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
@@ -1245,3 +1432,4 @@ PROJECT_NAME=$(echo "$DEFAULT_JSON" | jq -r '.organization.project.name')
 # assing_security_groups_to_environments $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
 # create_service_endpoints $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
 # create_agent_pools $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
+create_branch_protection_policies $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
