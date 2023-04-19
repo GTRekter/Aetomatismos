@@ -1,8 +1,9 @@
 {
     "organization": {
         "name": "name-of-your-organization",
+        "pat": "xxxxxxxx",
         "azure_active_directory": {
-            "tenant_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+            "tenant_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
         },
         "users": [
             {
