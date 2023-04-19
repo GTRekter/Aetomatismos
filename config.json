@@ -1,6 +1,6 @@
 {
     "organization": {
-        "name": "",
+        "name": "portaivan",
         "azure_active_directory": {
             "tenant_id": ""
         },
@@ -967,8 +967,10 @@
         ],
         "pipelines": [
             {
-                "name": "AD_Groups_RBAC",
-                "repository_name": "AD_Groups_RBAC"
+                "name": "Azure_DNS",
+                "folder_name": "/",
+                "repository_name": "Azure_DNS",
+                "pipeline_path": "/azure_pipeline.yml"
             }
         ],
         "environments": [
