@@ -11,80 +11,131 @@
 function out {
     case "$1" in
         success)
-            echo -e "\033[32m${@:2}\033[0m"
+            echo -ne "\033[32m${@:2}\033[0m"
             ;;
         warning)
-            echo -e "\033[33m${@:2}\033[0m"
+            echo -ne "\033[33m${@:2}\033[0m"
             ;;
         error)
-            echo -e "\033[31m${@:2}\033[0m"
+            echo -ne "\033[31m${@:2}\033[0m"
             ;;
         *)
-            echo "${@:1}"
+            echo -ne "${@:1}"
             ;;
     esac
 }
+function log {
+    local LEVEL=$1
+    local LOG_FILE="mylog.log"
+    local TIMESTAMP=$(date +"%Y-%m-%d %H:%M:%S")
+    case "$LEVEL" in
+        verbose)
+            echo "[$TIMESTAMP] [VERBOSE] ${@:2}" >> $LOG_FILE
+            ;;
+        debug|verbose)
+            echo "[$TIMESTAMP] [DEBUG] ${@:2}" >> $LOG_FILE
+            ;;
+        warning|verbose)
+            echo "[$TIMESTAMP] [WARNING] ${@:2}" >> $LOG_FILE
+            ;;
+        error|verbose)
+            echo "[$TIMESTAMP] [ERROR] ${@:2}" >> $LOG_FILE
+            ;;
+        *|verbose)
+            echo "[$TIMESTAMP] [INFO] ${@:1}" >> $LOG_FILE
+            ;;
+    esac
+}
+function loading() {
+  local title=${1}
+  local pid=$!
+  local spin='-\|/'
+  local i=0
+  echo -ne "${title} ["
+  while :; do
+    printf "\r%s" "${spin:i++%${#spin}:1}"
+    sleep 0.1
+    if ! kill -0 $pid 2>/dev/null; then
+      break
+    fi
+  done
+  printf "\r%s" "${title} Done\n"
+  wait $pid
+}
+
+# ==================== ORGANIZATION ====================
 function authenticate_to_azure_devops {
     local ORG_NAME=$1
-    out "Authenticating to Azure DevOps"
+    log "Authenticating to Azure DevOps"
+    log verbose "Organization: $ORG_NAME"
+    log verbose "Command: az devops login --organization https://dev.azure.com/$ORG_NAME"
     az devops login --organization https://dev.azure.com/$ORG_NAME --verbose
     if [ $? -eq 0 ]; then
-        out success "Authentication to Azure DevOps successfull"
+        log success "Authentication to Azure DevOps successfull"
     else
-        out error "Authentication to Azure DevOps failed"
+        log error "Authentication to Azure DevOps failed"
         exit 1
     fi
 }
-# ==================== ORGANIZATION ====================
 function add_users_to_organization {
     local ORG_NAME=$1
     local DEFAULT_JSON=$2
-    out "Adding users to $ORG_NAME organization"
+    log "Adding users to $ORG_NAME organization"
     for USER in $(echo "$DEFAULT_JSON" | jq -r '.organization.users[] | @base64'); do
         USER_JSON=$(echo "$USER" | base64 --decode | jq -r '.')
+        log verbose "User: $USER_JSON"
         NAME=$(echo "$USER_JSON" | jq -r '.name')
+        log verbose "NAME: $NAME"
         EMAIL=$(echo "$USER_JSON" | jq -r '.email')
-        out "Checking if user $NAME ($EMAIL) is already a member of $ORG_NAME organization"
+        log verbose "EMAIL: $EMAIL"
+        log "Checking if user $NAME ($EMAIL) is already a member of $ORG_NAME organization"
+        log verbose "Command: az devops user show --user $EMAIL --organization https://dev.azure.com/$ORG_NAME"
         RESPONSE=$(az devops user show --user $EMAIL --organization "https://dev.azure.com/$ORG_NAME")
         if [ -z "$RESPONSE" ]; then
-            out success "User $NAME ($EMAIL) is not a member of $ORG_NAME organization"
+            log success "User $NAME ($EMAIL) is not a member of $ORG_NAME organization"
         else
-            out warning  "User $NAME ($EMAIL) is already a member of $ORG_NAME organization. Skipping..."
+            log warning  "User $NAME ($EMAIL) is already a member of $ORG_NAME organization. Skipping..."
             continue
         fi
-        out "Adding user $NAME ($EMAIL) to $ORG organization"
+        log "Adding user $NAME ($EMAIL) to $ORG organization"
+        log verbose "Command: az devops user add --email-id $EMAIL --license-type express --send-email-invite false --organization https://dev.azure.com/$ORG_NAME"
         az devops user add --email-id "$EMAIL" --license-type "express" --send-email-invite false --organization "https://dev.azure.com/$ORG_NAME" --verbose
         if [ $? -eq 0 ]; then
-            out success "User $NAME ($EMAIL) was added to $ORG_NAME organization"
+            log success "User $NAME ($EMAIL) was added to $ORG_NAME organization"
         else
-            out error "User $NAME ($EMAIL) was not added to $ORG_NAME organization"
-            exit 1
+            log error "User $NAME ($EMAIL) was not added to $ORG_NAME organization"
+            return 1
         fi
     done
 }
 function install_extensions_in_organization {
     local ORG_NAME=$1
     local DEFAULT_JSON=$2
-    out "Installing extensions in the $ORG_NAME organization"
+    log "Installing extensions in the $ORG_NAME organization"
     for EXRENSION in $(echo "$DEFAULT_JSON" | jq -r '.organization.extensions[] | @base64'); do
         EXRENSION_JSON=$(echo "$EXRENSION" | base64 --decode | jq -r '.')
+        log verbose "Extension: $EXRENSION_JSON"
         ID=$(echo "$EXRENSION_JSON" | jq -r '.id')
+        log verbose "ID: $ID"
         PUBLISHER_ID=$(echo "$EXRENSION_JSON" | jq -r '.publisher_id')
-        out "Checking if $ID extension is already installed"
+        log verbose "PUBLISHER_ID: $PUBLISHER_ID"
+        log "Checking if $ID extension is already installed"
+        log verbose "Command: az devops extension show --extension-id $ID --publisher-id $PUBLISHER_ID --organization https://dev.azure.com/$ORG_NAME"
         RESPONSE=$(az devops extension show --extension-id "$ID" --publisher-id "$PUBLISHER_ID" --organization "https://dev.azure.com/$ORG_NAME")
         if [ -z "$RESPONSE" ]; then
-            out "$ID is not installed"
+            log "$ID is not installed"
         else
-            out warning "$ID is already installed. Skipping..."
+            log warning "$ID is already installed. Skipping..."
             continue
         fi
-        out "Installing $ID extension in $ORG_NAME organization"
+        log "Installing $ID extension in $ORG_NAME organization"
+        log verbose "Command: az devops extension install --extension-id $ID --publisher-id $PUBLISHER_ID --organization https://dev.azure.com/$ORG_NAME"
         az devops extension install --extension-id "$ID" --publisher-id "$PUBLISHER_ID" --organization "https://dev.azure.com/$ORG_NAME" --verbose
         if [ $? -eq 0 ]; then
-            out success "Extension $ID was installed to $ORG_NAME organization"
+            log success "Extension $ID was installed to $ORG_NAME organization"
         else
-            out error "Extension $ID was not installed to $ORG_NAME organization"
-            exit 1
+            log error "Extension $ID was not installed to $ORG_NAME organization"
+            return 1
         fi
     done
 }
@@ -92,8 +143,8 @@ function connecting_organization_to_azure_active_directory {
     local ORG_NAME=$1
     local DEFAULT_JSON=$2
     TENANT_ID=$(echo "$DEFAULT_JSON" | jq -r '.organization.azure_active_directory.tenant_id')
-    out "Connecting to $TENANT_ID tenant Azure Active Directory"
-
+    log verbose "TENANT_ID: $TENANT_ID"
+    log "Connecting to $TENANT_ID tenant Azure Active Directory"
     # This call just return the list of possible tenants
     # out "Check if the $ORG_NAME organization is already connected to Azure Active Directory"
     # RESPONSE=$(curl --silent \
@@ -118,29 +169,37 @@ function connecting_organization_to_azure_active_directory {
     # else
     #     out "The $ORG_NAME organization is not connected to Azure Active Directory. Connecting..."
     # fi
-    out "Check if the $ORG_NAME organization is already connected to Azure Active Directory"
+    log "Check if the $ORG_NAME organization is already connected to Azure Active Directory"
+    log verbose "Url: https://dev.azure.com/$ORG_NAME/_settings/organizationAad?__rt=fps&__ver=2"
     RESPONSE=$(curl --silent \
             --write-out "\n%{http_code}" \
             --header "Authorization: Basic $(echo -n :$PAT | base64)" \
             --header "Content-Type: application/json" \
             "https://dev.azure.com/$ORG_NAME/_settings/organizationAad?__rt=fps&__ver=2")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    log verbose "Response code: $HTTP_STATUS"
     RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    log verbose "Response body: $RESPONSE_BODY"
     if [ $HTTP_STATUS != 200 ]; then
-        out error "Error during the retrieval of the list of existing Azure Active Directories"
-        exit 1;
+        log error "Error during the retrieval of the list of existing Azure Active Directories"
+        return 1;
     else
-        out success "The list of existing Azure Active Directories was retrieved successfully"
+        log success "The list of existing Azure Active Directories was retrieved successfully"
     fi
     if [[ $(echo "$RESPONSE_BODY" | jq -r '.fps.dataProviders.data."ms.vss-admin-web.organization-admin-aad-data-provider".orgnizationTenantData.domain') != "" ]]; then    
         DISPLAY_NAME=$(echo "$RESPONSE_BODY" | jq -r '.fps.dataProviders.data."ms.vss-admin-web.organization-admin-aad-data-provider".orgnizationTenantData.displayName')
+        log verbose "DISPLAY_NAME: $DISPLAY_NAME"
         ID=$(echo "$RESPONSE_BODY" | jq -r '.fps.dataProviders.data."ms.vss-admin-web.organization-admin-aad-data-provider".orgnizationTenantData.id')
+        log verbose "ID: $ID"
         DOMAIN=$(echo "$RESPONSE_BODY" | jq -r '.fps.dataProviders.data."ms.vss-admin-web.organization-admin-aad-data-provider".orgnizationTenantData.domain')
-        out warning "The $ORG_NAME organization is already connected to the $DISPLAY_NAME ($ID) Azure Active Directory. Skipping..."
+        log verbose "DOMAIN: $DOMAIN"
+        log warning "The $ORG_NAME organization is already connected to the $DISPLAY_NAME ($ID) Azure Active Directory. Skipping..."
         return 1
     else
-        out "The $ORG_NAME organization is not connected to Azure Active Directory. Connecting..."
+        log "The $ORG_NAME organization is not connected to Azure Active Directory. Connecting..."
     fi
+    log verbose "Request: '[{\"from\":\"\",\"op\":2,\"path\":\"/TenantId\",\"value\":\"$TENANT_ID\"}]'"
+    log verbose "Url: https://vssps.dev.azure.com/$ORG_NAME/_apis/Organization/Organizations/Me?api-version=5.0-preview.1"
     RESPONSE=$(curl --silent \
             --request PATCH \
             --write-out "\n%{http_code}" \
@@ -149,22 +208,26 @@ function connecting_organization_to_azure_active_directory {
             --data-raw '[{"from":"","op":2,"path":"/TenantId","value":"'$TENANT_ID'"}]' \
             "https://vssps.dev.azure.com/$ORG_NAME/_apis/Organization/Organizations/Me?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    log verbose "Response code: $HTTP_STATUS"
     RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-    echo $RESPONSE_BODY
+    log verbose "Response body: $RESPONSE_BODY"
     if [ $HTTP_STATUS != 200 ]; then
-        out error "Error during the connection to Azure Active Directory. $RESPONSE_BODY"
-        exit 1;
+        log error "Error during the connection to Azure Active Directory. $RESPONSE_BODY"
+        return 1;
     else
-        out success "Connection to Azure Active Directory was successful"
+        log success "Connection to Azure Active Directory was successful"
     fi
 }
 function configure_organization_policies {
-    local ORG_NAME=$1
-    local DEFAULT_JSON=$2
-    out "Configure $ORG_NAME organization policies"
-
+    local ORG_ID=$1
+    local ORG_NAME=$2
+    local DEFAULT_JSON=$3
+    local PAT=$4
+    log "Configure $ORG_NAME organization policies"
     THIRD_PARTY_ACCESS_VIA_OAUTH=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.disallow_third_party_application_access_via_oauth')
-    out "Setting Third-party application access via OAuth to $THIRD_PARTY_ACCESS_VIA_OAUTH"
+    log "Setting Third-party application access via OAuth to $THIRD_PARTY_ACCESS_VIA_OAUTH"
+    log verbose 'Request: [{"from":"","op":2,"path":"/Value","value":"'$THIRD_PARTY_ACCESS_VIA_OAUTH'"}]' 
+    log verbose "Url: https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.DisallowOAuthAuthentication?api-version=5.0-preview.1"
     RESPONSE=$(curl --silent \
             --request PATCH \
             --write-out "\n%{http_code}" \
@@ -173,15 +236,17 @@ function configure_organization_policies {
             --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$THIRD_PARTY_ACCESS_VIA_OAUTH'"}]' \
             "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.DisallowOAuthAuthentication?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    log verbose "Response code: $HTTP_STATUS"
     if [ $HTTP_STATUS != 204 ]; then
-        out error "Error during the configuration of the Third-party application access via OAuth policy. $RESPONSE_BODY"
-        exit 1;
+        log error "Error during the configuration of the Third-party application access via OAuth policy. $RESPONSE_BODY"
+        return 1;
     else
-        out success "Configuration of the Third-party application access via OAuth policy was successful"
+        log success "Configuration of the Third-party application access via OAuth policy was successful"
     fi
-
     SSH_AUTHENTICATION=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.disallow_ssh_authentication')
-    out "Setting SSH authentication to $SSH_AUTHENTICATION"
+    log "Setting SSH authentication to $SSH_AUTHENTICATION"
+    log verbose 'Request: [{"from":"","op":2,"path":"/Value","value":"'$SSH_AUTHENTICATION'"}]'
+    log verbose "Url: https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.DisallowSecureShell?api-version=5.0-preview.1"
     RESPONSE=$(curl --silent \
             --request PATCH \
             --write-out "\n%{http_code}" \
@@ -190,15 +255,17 @@ function configure_organization_policies {
             --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$SSH_AUTHENTICATION'"}]' \
             "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.DisallowSecureShell?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE") 
+    log verbose "Response code: $HTTP_STATUS"
     if [ $HTTP_STATUS != 204 ]; then
-        out error "Error during the configuration of the SSH authentication policy. $RESPONSE_BODY"
-        exit 1;
+        log error "Error during the configuration of the SSH authentication policy. $RESPONSE_BODY"
+        return 1;
     else
-        out success "Configuration of the SSH authentication policy was successful"
+        log success "Configuration of the SSH authentication policy was successful"
     fi
-
     LOG_AUDIT_EVENTS=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.log_audit_events')
-    out "Setting Log audit events to $LOG_AUDIT_EVENTS"
+    log "Setting Log audit events to $LOG_AUDIT_EVENTS"
+    log verbose 'Request: [{"from":"","op":2,"path":"/Value","value":"'$LOG_AUDIT_EVENTS'"}]'
+    log verbose "Url: https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.LogAuditEvents?api-version=5.0-preview.1"
     RESPONSE=$(curl --silent \
             --request PATCH \
             --write-out "\n%{http_code}" \
@@ -207,15 +274,17 @@ function configure_organization_policies {
             --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$LOG_AUDIT_EVENTS'"}]' \
             "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.LogAuditEvents?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    log verbose "Response code: $HTTP_STATUS"
     if [ $HTTP_STATUS != 204 ]; then
-        out error "Error during the configuration of the Log audit events policy. $RESPONSE_BODY"
-        exit 1;
+        log error "Error during the configuration of the Log audit events policy. $RESPONSE_BODY"
+        return 1;
     else
-        out success "Configuration of the Log audit events policy was successful"
+        log success "Configuration of the Log audit events policy was successful"
     fi
-
     ALLOW_PUBLIC_PROJECTS=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.allow_public_projects')
-    out "Setting Allow public projects to $ALLOW_PUBLIC_PROJECTS"
+    log "Setting Allow public projects to $ALLOW_PUBLIC_PROJECTS"
+    log verbose 'Request: [{"from":"","op":2,"path":"/Value","value":"'$ALLOW_PUBLIC_PROJECTS'"}]'
+    log verbose "Url: https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.AllowAnonymousAccess?api-version=5.0-preview.1"
     RESPONSE=$(curl --silent \
             --request PATCH \
             --write-out "\n%{http_code}" \
@@ -224,15 +293,17 @@ function configure_organization_policies {
             --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ALLOW_PUBLIC_PROJECTS'"}]' \
             "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.AllowAnonymousAccess?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    log verbose "Response code: $HTTP_STATUS"
     if [ $HTTP_STATUS != 204 ]; then
-        out error "Error during the configuration of the Allow public projects policy. $RESPONSE_BODY"
-        exit 1;
+        log error "Error during the configuration of the Allow public projects policy. $RESPONSE_BODY"
+        return 1;
     else
-        out success "Configuration of the Allow public projects policy was successful"
+        log success "Configuration of the Allow public projects policy was successful"
     fi
-
     ARTIFACTS_EXTERNAL_PACKAGE_PROTECTION_TOKEN=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.additional_protections_public_package_registries')
-    out "Setting Additional protections for public package registries to $ARTIFACTS_EXTERNAL_PACKAGE_PROTECTION_TOKEN"
+    log "Setting Additional protections for public package registries to $ARTIFACTS_EXTERNAL_PACKAGE_PROTECTION_TOKEN"
+    log verbose 'Request: [{"from":"","op":2,"path":"/Value","value":"'$ARTIFACTS_EXTERNAL_PACKAGE_PROTECTION_TOKEN'"}]'
+    log verbose "Url: https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.ArtifactsExternalPackageProtectionToken?api-version=5.0-preview.1"
     RESPONSE=$(curl --silent \
             --request PATCH \
             --write-out "\n%{http_code}" \
@@ -241,15 +312,17 @@ function configure_organization_policies {
             --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ARTIFACTS_EXTERNAL_PACKAGE_PROTECTION_TOKEN'"}]' \
             "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.ArtifactsExternalPackageProtectionToken?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    log verbose "Response code: $HTTP_STATUS"
     if [ $HTTP_STATUS != 204 ]; then
-        out error "Error during the configuration of the Additional protections for public package registries policy. $RESPONSE_BODY"
-        exit 1;
+        log error "Error during the configuration of the Additional protections for public package registries policy. $RESPONSE_BODY"
+        return 1;
     else
-        out success "Configuration of the Additional protections for public package registries policy was successful"
+        log success "Configuration of the Additional protections for public package registries policy was successful"
     fi
-
     ENFORCE_AZURE_ACTIVE_DIRECTORY_CONDITIONAL_ACCESS=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.enable_azure_active_directory_conditional_access_policy_validation')
-    out "Setting Additional protections for public package registries to $ENFORCE_AZURE_ACTIVE_DIRECTORY_CONDITIONAL_ACCESS"
+    log "Setting Additional protections for public package registries to $ENFORCE_AZURE_ACTIVE_DIRECTORY_CONDITIONAL_ACCESS"
+    log verbose 'Request: [{"from":"","op":2,"path":"/Value","value":"'$ENFORCE_AZURE_ACTIVE_DIRECTORY_CONDITIONAL_ACCESS'"}]'
+    log verbose "Url: https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.EnforceAADConditionalAccess?api-version=5.0-preview.1"
     RESPONSE=$(curl --silent \
             --request PATCH \
             --write-out "\n%{http_code}" \
@@ -258,15 +331,17 @@ function configure_organization_policies {
             --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ENFORCE_AZURE_ACTIVE_DIRECTORY_CONDITIONAL_ACCESS'"}]' \
             "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.EnforceAADConditionalAccess?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    log verbose "Response code: $HTTP_STATUS"
     if [ $HTTP_STATUS != 204 ]; then
-        out error "Error during the configuration of the Additional protections for public package registries policy. $RESPONSE_BODY"
-        exit 1;
+        log error "Error during the configuration of the Additional protections for public package registries policy. $RESPONSE_BODY"
+        return 1;
     else
-        out success "Configuration of the Additional protections for public package registries policy was successful"
+        log success "Configuration of the Additional protections for public package registries policy was successful"
     fi
-
     ALLOW_TEAM_ADMINS_INVITATIONS_ACCESS_TOKEN=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.allow_team_and_project_administrators_to_invite_new_users')
-    out "Setting Additional protections for public package registries to $ALLOW_TEAM_ADMINS_INVITATIONS_ACCESS_TOKEN"
+    log "Setting Additional protections for public package registries to $ALLOW_TEAM_ADMINS_INVITATIONS_ACCESS_TOKEN"
+    log verbose 'Request: [{"from":"","op":2,"path":"/Value","value":"'$ALLOW_TEAM_ADMINS_INVITATIONS_ACCESS_TOKEN'"}]'
+    log verbose "Url: https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.AllowTeamAdminsInvitationsAccessToken?api-version=5.0-preview.1"
     RESPONSE=$(curl --silent \
             --request PATCH \
             --write-out "\n%{http_code}" \
@@ -275,15 +350,17 @@ function configure_organization_policies {
             --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ALLOW_TEAM_ADMINS_INVITATIONS_ACCESS_TOKEN'"}]' \
             "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.AllowTeamAdminsInvitationsAccessToken?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    log verbose "Response code: $HTTP_STATUS"
     if [ $HTTP_STATUS != 204 ]; then
-        out error "Error during the configuration of the Additional protections for public package registries policy. $RESPONSE_BODY"
-        exit 1;
+        log error "Error during the configuration of the Additional protections for public package registries policy. $RESPONSE_BODY"
+        return 1;
     else
-        out success "Configuration of the Additional protections for public package registries policy was successful"
+        log success "Configuration of the Additional protections for public package registries policy was successful"
     fi
-
     ALLOW_GUEST_USERS=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.disallow_external_guest_access')
-    out "Setting Allow guest users to $ALLOW_GUEST_USERS"
+    log "Setting Allow guest users to $ALLOW_GUEST_USERS"
+    log verbose 'Request: [{"from":"","op":2,"path":"/Value","value":"'$ALLOW_GUEST_USERS'"}]'
+    log verbose "Url: https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.DisallowAadGuestUserAccess?api-version=5.0-preview.1"
     RESPONSE=$(curl --silent \
             --request PATCH \
             --write-out "\n%{http_code}" \
@@ -292,33 +369,20 @@ function configure_organization_policies {
             --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ALLOW_GUEST_USERS'"}]' \
             "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.DisallowAadGuestUserAccess?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    log verbose "Response code: $HTTP_STATUS"
     if [ $HTTP_STATUS != 204 ]; then
-        out error "Error during the configuration of the Allow guest users policy. $RESPONSE_BODY"
-        exit 1;
+        log error "Error during the configuration of the Allow guest users policy. $RESPONSE_BODY"
+        return 1;
     else
-        out success "Configuration of the Allow guest users policy was successful"
+        log success "Configuration of the Allow guest users policy was successful"
     fi
-
     REQUEST_ACCESS=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.request_access.enable')
     REQUEST_ACCESS_URL=$(echo "$DEFAULT_JSON" | jq -r '.organization.policies.request_access.url')
+    log "Skipping the configuration of the organization url"
     if  [  ! $REQUEST_ACCESS ]; then
-        out "Read organization ID. This property is needed to get a list of service endpoints"
-        RESPONSE=$(curl --silent \
-                --write-out "\n%{http_code}" \
-                --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-                --header "Content-Type: application/json" \
-                --data-raw '{"contributionIds": ["ms.vss-features.my-organizations-data-provider"],"dataProviderContext":{"properties":{}}}' \
-                "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
-        HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-        RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-        if [ $HTTP_STATUS != 200 ]; then
-            out error "Failed to get the list of existing service endpoints. $RESPONSE"
-            exit 1;
-        else
-            out success "The list of existing service endpoints was succesfully retrieved"
-        fi
-        ORG_ID=$(echo "$RESPONSE_BODY" | jq '.dataProviders."ms.vss-features.my-organizations-data-provider".organizations[] | select(.name == "'"$ORG_NAME"'") | .id' | tr -d '"')
-        out "Setting $ORG_NAME organization url to $REQUEST_ACCESS_URL"
+        log "Setting $ORG_NAME organization url to $REQUEST_ACCESS_URL"
+        log verbose 'Request: [{"from":"","op":2,"path":"/Value","value":"'$REQUEST_ACCESS_URL'"}]'
+        log verbose "Url: https://vssps.dev.azure.com/$ORG_NAME/_apis/Organization/Collections/$ORG_ID/Properties?api-version=5.0-preview.1"
         RESPONSE=$(curl --silent \
                 --request PATCH \
                 --write-out "\n%{http_code}" \
@@ -327,14 +391,17 @@ function configure_organization_policies {
                 --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$ALLOW_GUEST_USERS'"}]' \
                 "https://vssps.dev.azure.com/$ORG_NAME/_apis/Organization/Collections/$ORG_ID/Properties?api-version=5.0-preview.1")
         HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+        log verbose "Response code: $HTTP_STATUS"
         if [ $HTTP_STATUS != 200 ]; then
-            out error "Error during the configuration of the organization url. $RESPONSE_BODY"
-            exit 1;
+            log error "Error during the configuration of the organization url. $RESPONSE_BODY"
+            return 1;
         else
-            out success "Configuration of the organization url was successful"
+            log success "Configuration of the organization url was successful"
         fi
     fi
-    out "Setting Request access to $REQUEST_ACCESS"
+    log "Setting Request access to $REQUEST_ACCESS"
+    log verbose 'Request: [{"from":"","op":2,"path":"/Value","value":"'$REQUEST_ACCESS'"}]'
+    log verbose "Url: https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.AllowRequestAccessToken?api-version=5.0-preview.1"
     RESPONSE=$(curl --silent \
             --request PATCH \
             --write-out "\n%{http_code}" \
@@ -343,37 +410,24 @@ function configure_organization_policies {
             --data-raw '[{"from":"","op":2,"path":"/Value","value":"'$REQUEST_ACCESS'"}]' \
             "https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.AllowRequestAccessToken?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    log verbose "Response code: $HTTP_STATUS"
     if [ $HTTP_STATUS != 204 ]; then
-        out error "Error during the configuration of the Request access policy. $RESPONSE_BODY"
-        exit 1;
+        log error "Error during the configuration of the Request access policy. $RESPONSE_BODY"
+        return 1;
     else
-        out success "Configuration of the Request access policy was successful"
+        log success "Configuration of the Request access policy was successful"
     fi
 }
 function configure_organization_settings {
-    local ORG_NAME=$1
-    local DEFAULT_JSON=$2
-    out "Configure $ORG_NAME organization settigns"
-
-    out "Read organization ID. This property is needed to get a list of service endpoints"
-    RESPONSE=$(curl --silent \
-            --write-out "\n%{http_code}" \
-            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-            --header "Content-Type: application/json" \
-            --data-raw '{"contributionIds": ["ms.vss-features.my-organizations-data-provider"],"dataProviderContext":{"properties":{}}}' \
-            "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
-    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-    if [ $HTTP_STATUS != 200 ]; then
-        out error "Failed to get the list of existing service endpoints. $RESPONSE"
-        exit 1;
-    else
-        out success "The list of existing service endpoints was succesfully retrieved"
-    fi
-    ORG_ID=$(echo "$RESPONSE_BODY" | jq '.dataProviders."ms.vss-features.my-organizations-data-provider".organizations[] | select(.name == "'"$ORG_NAME"'") | .id' | tr -d '"')
-    
+    local ORG_ID=$1
+    local ORG_NAME=$2
+    local DEFAULT_JSON=$3
+    local PAT=$4
+    log "Configure $ORG_NAME organization settigns"  
     DISABLE_ANONYMOUS_ACCESS_BADGES=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.disable_anonymous_access_badges')
-    out "Setting Disable anonymous access badges to $DISABLE_ANONYMOUS_ACCESS_BADGES"
+    log "Setting Disable anonymous access badges to $DISABLE_ANONYMOUS_ACCESS_BADGES"
+    log verbose 'Request: {"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"badgesArePublic":"'$DISABLE_ANONYMOUS_ACCESS_BADGES'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}'
+    log verbose "Url: https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1"
     RESPONSE=$(curl --silent \
         --request POST \
         --write-out "\n%{http_code}" \
@@ -382,16 +436,19 @@ function configure_organization_settings {
         --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"badgesArePublic":"'$DISABLE_ANONYMOUS_ACCESS_BADGES'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
         "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    log verbose "Response code: $HTTP_STATUS"
     RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    log verbose "Response body: $RESPONSE_BODY"
     if [ $HTTP_STATUS != 200 ]; then
-        out error "Error during the configuration of the Disable anonymous access badges policy. $RESPONSE_BODY"
-        exit 1;
+        log error "Error during the configuration of the Disable anonymous access badges policy. $RESPONSE_BODY"
+        return 1;
     else
-        out success "Configuration of the Disable anonymous access badges policy was successful"
+        log success "Configuration of the Disable anonymous access badges policy was successful"
     fi
-
     LIMIT_VARIABLES_SET_QUEUE_TIME=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.limit_variables_set_queue_time')
-    out "Setting Limit variables set at queue time to $LIMIT_VARIABLES_SET_QUEUE_TIME"
+    log "Setting Limit variables set at queue time to $LIMIT_VARIABLES_SET_QUEUE_TIME"
+    log verbose 'Request: {"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"enforceSettableVar":"'$LIMIT_VARIABLES_SET_QUEUE_TIME'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}'
+    log verbose "Url: https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1"
     RESPONSE=$(curl --silent \
         --request POST \
         --write-out "\n%{http_code}" \
@@ -400,16 +457,19 @@ function configure_organization_settings {
         --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"enforceSettableVar":"'$LIMIT_VARIABLES_SET_QUEUE_TIME'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
         "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    log verbose "Response code: $HTTP_STATUS"
     RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    log verbose "Response body: $RESPONSE_BODY"
     if [ $HTTP_STATUS != 200 ]; then
-        out error "Error during the configuration of the Limit variables set at queue time policy. $RESPONSE_BODY"
-        exit 1;
+        log error "Error during the configuration of the Limit variables set at queue time policy. $RESPONSE_BODY"
+        return 1;
     else
-        out success "Configuration of the Limit variables set at queue time policy was successful"
+        log success "Configuration of the Limit variables set at queue time policy was successful"
     fi
-
     LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_NON_RELEASE_PIPELINES=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.limit_job_authorization_current_project_non_release_pipelines')
-    out "Setting Limit job authorization scope to current project for non-release pipelines to $LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_NON_RELEASE_PIPELINES"
+    log "Setting Limit job authorization scope to current project for non-release pipelines to $LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_NON_RELEASE_PIPELINES"
+    log verbose 'Request: {"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"enforceJobAuthScope":"'$LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_NON_RELEASE_PIPELINES'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}'
+    log verbose "Url: https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1"
     RESPONSE=$(curl --silent \
         --request POST \
         --write-out "\n%{http_code}" \
@@ -418,16 +478,19 @@ function configure_organization_settings {
         --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"enforceJobAuthScope":"'$LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_NON_RELEASE_PIPELINES'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
         "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    log verbose "Response code: $HTTP_STATUS"
     RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    log verbose "Response body: $RESPONSE_BODY"
     if [ $HTTP_STATUS != 200 ]; then
-        out error "Error during the configuration of the Limit job authorization scope to current project for non-release pipelines policy. $RESPONSE_BODY"
-        exit 1;
+        log error "Error during the configuration of the Limit job authorization scope to current project for non-release pipelines policy. $RESPONSE_BODY"
+        return 1;
     else
-        out success "Configuration of the Limit job authorization scope to current project for non-release pipelines policy was successful"
+        log success "Configuration of the Limit job authorization scope to current project for non-release pipelines policy was successful"
     fi
-
     LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_RELEASE_PIPELINES=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.limit_job_authorization_current_project_release_pipelines')
-    out "Setting Limit job authorization scope to current project for release pipelines to $LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_NON_RELEASE_PIPELINES"
+    log "Setting Limit job authorization scope to current project for release pipelines to $LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_NON_RELEASE_PIPELINES"
+    log verbose 'Request: {"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"enforceJobAuthScopeForReleases":"'$LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_RELEASE_PIPELINES'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}'
+    log verbose "Url: https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1"
     RESPONSE=$(curl --silent \
         --request POST \
         --write-out "\n%{http_code}" \
@@ -436,16 +499,19 @@ function configure_organization_settings {
         --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"enforceJobAuthScopeForReleases":"'$LIMIT_JOB_AUTHORIZATION_CURRENT_PROJECT_RELEASE_PIPELINES'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
         "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    log verbose "Response code: $HTTP_STATUS"
     RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    log verbose "Response body: $RESPONSE_BODY"
     if [ $HTTP_STATUS != 200 ]; then
-        out error "Error during the configuration of the Limit job authorization scope to current project for release pipelines policy. $RESPONSE_BODY"
-        exit 1;
+        log error "Error during the configuration of the Limit job authorization scope to current project for release pipelines policy. $RESPONSE_BODY"
+        return 1;
     else
-        out success "Configuration of the Limit job authorization scope to current project for release pipelines policy was successful"
+        log success "Configuration of the Limit job authorization scope to current project for release pipelines policy was successful"
     fi
-
     PROJECT_ACCESS_REPOSITORIES_YAML_PIPELINES=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.protect_access_repositories_yaml_pipelines')
-    out "Setting Protect access to repositories for YAML pipelines to $PROJECT_ACCESS_REPOSITORIES_YAML_PIPELINES"
+    log "Setting Protect access to repositories for YAML pipelines to $PROJECT_ACCESS_REPOSITORIES_YAML_PIPELINES"
+    log verbose 'Request: {"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"enforceReferencedRepoScopedToken":"'$PROJECT_ACCESS_REPOSITORIES_YAML_PIPELINES'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}'
+    log verbose "Url: https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1"
     RESPONSE=$(curl --silent \
         --request POST \
         --write-out "\n%{http_code}" \
@@ -454,16 +520,19 @@ function configure_organization_settings {
         --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"enforceReferencedRepoScopedToken":"'$PROJECT_ACCESS_REPOSITORIES_YAML_PIPELINES'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
         "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    log verbose "Response code: $HTTP_STATUS"
     RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    log verbose "Response body: $RESPONSE_BODY"
     if [ $HTTP_STATUS != 200 ]; then
-        out error "Error during the configuration of the Protect access to repositories for YAML pipelines policy. $RESPONSE_BODY"
-        exit 1;
+        log error "Error during the configuration of the Protect access to repositories for YAML pipelines policy. $RESPONSE_BODY"
+        return 1;
     else
-        out success "Configuration of the Protect access to repositories for YAML pipelines policy was successful"
+        log success "Configuration of the Protect access to repositories for YAML pipelines policy was successful"
     fi
-
     DISABLE_STAGE_CHOOSER=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.disable_stage_chooser')
-    out "Setting Disable stage chooser to $DISABLE_STAGE_CHOOSER"
+    log "Setting Disable stage chooser to $DISABLE_STAGE_CHOOSER"
+    log verbose 'Request: {"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"disableStageChooser":"'$DISABLE_STAGE_CHOOSER'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}'
+    log verbose "Url: https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1"
     RESPONSE=$(curl --silent \
         --request POST \
         --write-out "\n%{http_code}" \
@@ -472,16 +541,19 @@ function configure_organization_settings {
         --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"disableStageChooser":"'$DISABLE_STAGE_CHOOSER'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
         "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    log verbose "Response code: $HTTP_STATUS"
     RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    log verbose "Response body: $RESPONSE_BODY"
     if [ $HTTP_STATUS != 200 ]; then
-        out error "Error during the configuration of the Disable stage chooser policy. $RESPONSE_BODY"
-        exit 1;
+        log error "Error during the configuration of the Disable stage chooser policy. $RESPONSE_BODY"
+        return 1;
     else
-        out success "Configuration of the Disable stage chooser policy was successful"
+        log success "Configuration of the Disable stage chooser policy was successful"
     fi
-
     DISABLE_CREATION_CLASSIC_BUILD_AND_CLASSIC_RELEASE_PIPELINES=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.disable_creation_classic_build_and_classic_release_pipelines')
-    out "Setting Disable creation of classic build and classic release pipelines to $DISABLE_CREATION_CLASSIC_BUILD_AND_CLASSIC_RELEASE_PIPELINES"
+    log "Setting Disable creation of classic build and classic release pipelines to $DISABLE_CREATION_CLASSIC_BUILD_AND_CLASSIC_RELEASE_PIPELINES"
+    log verbose 'Request: {"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"disableClassicPipelineCreation":"'$DISABLE_CREATION_CLASSIC_BUILD_AND_CLASSIC_RELEASE_PIPELINES'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}'
+    log verbose "Url: https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1"
     RESPONSE=$(curl --silent \
         --request POST \
         --write-out "\n%{http_code}" \
@@ -490,16 +562,19 @@ function configure_organization_settings {
         --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"disableClassicPipelineCreation":"'$DISABLE_CREATION_CLASSIC_BUILD_AND_CLASSIC_RELEASE_PIPELINES'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
         "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    log verbose "Response code: $HTTP_STATUS"
     RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    log verbose "Response body: $RESPONSE_BODY"
     if [ $HTTP_STATUS != 200 ]; then
-        out error "Error during the configuration of the Disable creation of classic build and classic release pipelines policy. $RESPONSE_BODY"
-        exit 1;
+        log error "Error during the configuration of the Disable creation of classic build and classic release pipelines policy. $RESPONSE_BODY"
+        return 1;
     else
-        out success "Configuration of the Disable creation of classic build and classic release pipelines policy was successful"
+        log success "Configuration of the Disable creation of classic build and classic release pipelines policy was successful"
     fi
-
     DISABLE_BUILD_IN_TASKS=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.disable_built_in_tasks')
-    out "Setting Disable built-in tasks to $DISABLE_BUILD_IN_TASKS"
+    log "Setting Disable built-in tasks to $DISABLE_BUILD_IN_TASKS"
+    log verbose 'Request: {"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"disableInBoxTasksVar":"'$DISABLE_BUILD_IN_TASKS'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}'
+    log verbose "Url: https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1"
     RESPONSE=$(curl --silent \
         --request POST \
         --write-out "\n%{http_code}" \
@@ -508,16 +583,19 @@ function configure_organization_settings {
         --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"disableInBoxTasksVar":"'$DISABLE_BUILD_IN_TASKS'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
         "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    log verbose "Response code: $HTTP_STATUS"
     RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    log verbose "Response body: $RESPONSE_BODY"
     if [ $HTTP_STATUS != 200 ]; then
-        out error "Error during the configuration of the Disable built-in tasks policy. $RESPONSE_BODY"
-        exit 1;
+        log error "Error during the configuration of the Disable built-in tasks policy. $RESPONSE_BODY"
+        return 1;
     else
-        out success "Configuration of the Disable built-in tasks policy was successful"
+        log success "Configuration of the Disable built-in tasks policy was successful"
     fi
-
     DISABLE_MARKETPLACE_TASKS=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.disable_marketplace_tasks')
-    out "Setting Disable marketplace tasks to $DISABLE_MARKETPLACE_TASKS"
+    log "Setting Disable marketplace tasks to $DISABLE_MARKETPLACE_TASKS"
+    log verbose 'Request: {"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"disableMarketplaceTasksVar":"'$DISABLE_MARKETPLACE_TASKS'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}'
+    log verbose "Url: https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1"
     RESPONSE=$(curl --silent \
         --request POST \
         --write-out "\n%{http_code}" \
@@ -526,16 +604,19 @@ function configure_organization_settings {
         --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"disableMarketplaceTasksVar":"'$DISABLE_MARKETPLACE_TASKS'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
         "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    log verbose "Response code: $HTTP_STATUS"
     RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    log verbose "Response body: $RESPONSE_BODY"
     if [ $HTTP_STATUS != 200 ]; then
-        out error "Error during the configuration of the Disable built-in tasks policy. $RESPONSE_BODY"
-        exit 1;
+        log error "Error during the configuration of the Disable built-in tasks policy. $RESPONSE_BODY"
+        return 1;
     else
-        out success "Configuration of the Disable built-in tasks policy was successful"
+        log success "Configuration of the Disable built-in tasks policy was successful"
     fi
-
     DISABLE_NODE_SIX_TASKS=$(echo "$DEFAULT_JSON" | jq -r '.organization.settings.disable_node_six_tasks')
-    out "Setting Disable Node 6 tasks to $DISABLE_NODE_SIX_TASKS"
+    log "Setting Disable Node 6 tasks to $DISABLE_NODE_SIX_TASKS"
+    log verbose 'Request: {"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"disableNode6Tasksvar":"'$DISABLE_NODE_SIX_TASKS'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}'
+    log verbose "Url: https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1"
     RESPONSE=$(curl --silent \
         --request POST \
         --write-out "\n%{http_code}" \
@@ -544,19 +625,21 @@ function configure_organization_settings {
         --data-raw '{"contributionIds":["ms.vss-build-web.pipelines-org-settings-data-provider"],"dataProviderContext":{"properties":{"disableNode6Tasksvar":"'$DISABLE_NODE_SIX_TASKS'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/_settings/pipelinessettings","routeId":"ms.vss-admin-web.collection-admin-hub-route","routeValues":{"adminPivot":"pipelinessettings","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
         "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    log verbose "Response code: $HTTP_STATUS"
     RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    log verbose "Response body: $RESPONSE_BODY"
     if [ $HTTP_STATUS != 200 ]; then
-        out error "Error during the configuration of the Disable built-in tasks policy. $RESPONSE_BODY"
-        exit 1;
+        log error "Error during the configuration of the Disable built-in tasks policy. $RESPONSE_BODY"
+        return 1;
     else
-        out success "Configuration of the Disable built-in tasks policy was successful"
+        log success "Configuration of the Disable built-in tasks policy was successful"
     fi
 }
 function configure_organization_repositories {
     local ORG_NAME=$1
     local DEFAULT_JSON=$2
-    out "Configuring organization repositories"
-    out warning "Microsoft doesn't have public APIs to configure this secion and it's using  ASP.NET __RequestVerificationToken to validate the requests. Because of that, this configuration is not supported yet."
+    log "Configuring organization repositories"
+    log warning "Microsoft doesn't have public APIs to configure this secion and it's using  ASP.NET __RequestVerificationToken to validate the requests. Because of that, this configuration is not supported yet."
 
     # response=$(curl --header "Authorization: Basic $(echo -n :$PAT | base64)" -s "https://gtrekter.visualstudio.com/_settings/repositories")
     # echo $response
@@ -612,47 +695,57 @@ function create_project {
     local ORG_NAME=$1
     local PROJECT_NAME=$2
     local DEFAULT_JSON=$3
-    out "Checking if $PROJECT_NAME project already exists"
+    log "Checking if $PROJECT_NAME project already exists"
+    log verbose "az devops project show --project $PROJECT_NAME --org https://dev.azure.com/$ORG_NAME"
     RESPONSE=$(az devops project show --project "$PROJECT_NAME" --org "https://dev.azure.com/$ORG_NAME")
     if [ -z "$RESPONSE" ]; then
-        out "$PROJECT_NAME project does not exist"
+        log "$PROJECT_NAME project does not exist"
     else
-        out warning "Project $PROJECT_NAME already exists. Skipping..."
-        return 1
+        log warning "Project $PROJECT_NAME already exists. Skipping..."
+        return 0
     fi
-    out "Creating $PROJECT_NAME project"
-    az devops project create --name "$PROJECT_NAME" --description "Scrum project" --detect false --org "https://dev.azure.com/$ORG_NAME" --process scrum --source-control git --visibility private --verbose
+    log "Creating $PROJECT_NAME project"
+    DESCRIPTION=$(echo "$DEFAULT_JSON" | jq -r '.organization.project.description')
+    PROCESS=$(echo "$DEFAULT_JSON" | jq -r '.organization.project.process')
+    log verbose "az devops project create --name $PROJECT_NAME --description '$DESCRIPTION' --detect false --org https://dev.azure.com/$ORG_NAME --process $PROCESS --source-control git --visibility private --verbose"
+    az devops project create --name "$PROJECT_NAME" --description "$DESCRIPTION" --detect false --org "https://dev.azure.com/$ORG_NAME" --process $PROCESS --source-control git --visibility private --verbose
     if [ $? -eq 0 ]; then
-        out success "$PROJECT_NAME project created successfully"
+        log success "$PROJECT_NAME project created successfully"
     else
-        out error "Failed to create $PROJECT_NAME project"
-        exit 1
+        log error "Failed to create $PROJECT_NAME project"
+        return 1
     fi
 }
 function create_security_groups {
     local ORG_NAME=$1
     local PROJECT_NAME=$2
     local DEFAULT_JSON=$3
-    out "Creating security groups in the $PROJECT_NAME project"
+    log "Creating security groups in the $PROJECT_NAME project"
     for SECURITY_GROUP in $(echo "$DEFAULT_JSON" | jq -r '.organization.project.security_groups[] | @base64'); do
         SECURITY_GROUP_JSON=$(echo "$SECURITY_GROUP" | base64 --decode | jq -r '.')
+        log verbose "Security group: $SECURITY_GROUP_JSON"
         NAME=$(echo "$SECURITY_GROUP_JSON" | jq -r '.name')
+        log verbose "Security group name: $NAME" 
         DESCRIPTION=$(echo "$SECURITY_GROUP_JSON" | jq -r '.description')
-        out "Checking if $NAME security group already exists"
-        RESPONSE=$(az devops security group show --name "$NAME" --project "$PROJECT_NAME" --organization "https://dev.azure.com/$ORG_NAME")
-        if [ -z "$RESPONSE" ]; then
-            out "$NAME security group does not exist"
+        log verbose "Security group description: $DESCRIPTION"
+        log "Checking if $NAME security group already exists"
+
+        log verbose "az devops security group list --project $PROJECT_NAME --organization https://dev.azure.com/$ORG_NAME"
+        RESPONSE=$(az devops security group list --project "$PROJECT_NAME" --organization "https://dev.azure.com/$ORG_NAME" | jq '.graphGroups[] | select(.displayName == "AAA") | length > 0')
+        if [ "$RESPONSE" ]; then
+            log "$NAME security group does not exist"
         else
-            out warning "$NAME security group already exists. Skipping..."
+            log warning "$NAME security group already exists. Skipping..."
             continue
         fi
-        out "Creating $NAME security group in $PROJECT_NAME project"
+        log "Creating $NAME security group in $PROJECT_NAME project"
+        log verbose "az devops security group create --name $NAME --description '$DESCRIPTION' --project $PROJECT_NAME --organization https://dev.azure.com/$ORG_NAME --scope project --verbose"
         az devops security group create --name "$NAME" --description "$DESCRIPTION" --project "$PROJECT_NAME" --organization "https://dev.azure.com/$ORG_NAME" --scope project --verbose
         if [ $? -eq 0 ]; then
-            out success "User $NAME ($EMAIL) was added to $ORG_NAME organization"
+            log success "User $NAME ($EMAIL) was added to $ORG_NAME organization"
         else
-            out error "User $NAME ($EMAIL) was not added to $ORG_NAME organization"
-            exit 1
+            log error "User $NAME ($EMAIL) was not added to $ORG_NAME organization"
+            return 1
         fi
     done
 }
@@ -660,54 +753,70 @@ function create_repositories {
     local ORG_NAME=$1
     local PROJECT_NAME=$2
     local DEFAULT_JSON=$3
-    out "Creating repositories in $PROJECT_NAME project"
+    log "Creating repositories in $PROJECT_NAME project"
     for REPO in $(echo "$DEFAULT_JSON" | jq -r '.repository.repositories[] | @base64'); do
         REPO_JSON=$(echo "$REPO" | base64 --decode | jq -r '.')
+        log verbose "Repository: $REPO_JSON"
         REPO_NAME=$(echo "$REPO_JSON" | jq -r '.name')
-        out "Checking if $REPO_NAME repository already exists"
+        log verbose "Repository name: $REPO_NAME"
+        log "Checking if $REPO_NAME repository already exists"
+        log verbose "az repos show --repository $REPO_NAME --project $PROJECT_NAME --org https://dev.azure.com/$ORG_NAME"
         RESPONSE=$(az repos show --repository "$REPO_NAME" --project "$PROJECT_NAME" --org "https://dev.azure.com/$ORG_NAME")
         if [ -z "$RESPONSE" ]; then
-            out "$REPO_NAME repository does not exist"
+            log "$REPO_NAME repository does not exist"
         else
-            out warning "$REPO_NAME repository already exists. Skipping..."
+            log warning "$REPO_NAME repository already exists. Skipping..."
             continue
         fi
-        out "Creating $REPO_NAME repository..."
+        log "Creating $REPO_NAME repository..."
+        log verbose "az repos create --name $REPO_NAME --project $PROJECT_NAME --org https://dev.azure.com/$ORG_NAME --verbose"
         az repos create --name "$REPO_NAME" --project "$PROJECT_NAME" --org "https://dev.azure.com/$ORG_NAME" --verbose
         if [ $? -eq 0 ]; then
-            out success "$REPO_NAME repository created successfully"
+            log success "$REPO_NAME repository created successfully"
         else
-            out error "Failed to create $REPO_NAME repository"
-            exit 1
+            log error "Failed to create $REPO_NAME repository"
+            return 1
         fi
-        out "Cloning $REPO_NAME repository..."
+        log "Cloning $REPO_NAME repository..."
+        log verbose "git clone https://xxxxxxxx@dev.azure.com/$ORG_NAME/$PROJECT_NAME/_git/$REPO_NAME"
         git clone https://$PAT@dev.azure.com/$ORG_NAME/$PROJECT_NAME/_git/$REPO_NAME
         cd $REPO_NAME
-        out "Configuring local git user"
+        log "Configuring local git user"
+        log verbose "git config user.email $EMAIL"
         git config user.email "you@example.com"
+        log verbose "git config user.name $NAME"
         git config user.name "Your Name"
-        out "Creating initial commit"
+        log "Creating initial commit"
+        log verbose "echo "# $REPO_NAME" > README.md"
         out "# $REPO_NAME" > README.md
-        git add README.md
+        log add README.md
+        log verbose "commit -m 'Initial commit'"
         git commit -m "Initial commit"
-        out "Pushing initial commit to $REPO_NAME repository"
+        log "Pushing initial commit to $REPO_NAME repository"
+        log verbose "git push origin master"
         git push origin master
         for BRANCH in $(echo "$DEFAULT_JSON" | jq -r '.repository.branches[] | @base64'); do
             BRANCH_JSON=$(echo "$BRANCH" | base64 --decode | jq -r '.')
+            log verbose "Branch: $BRANCH_JSON"
             BRANCH_NAME=$(echo "$BRANCH_JSON" | jq -r '.name')
-            out "Checking if $BRANCH_NAME branch already exists"
+            log verbose "Branch name: $BRANCH_NAME"
+            log "Checking if $BRANCH_NAME branch already exists"
             RESPONSE=$(git branch -a | grep $BRANCH_NAME)
             if [ -z "$RESPONSE" ]; then
-                out "creating $BRANCH_NAME branch"
+                log "Creating $BRANCH_NAME branch"
+                log verbose "git checkout -b $BRANCH_NAME"
                 git checkout -b $BRANCH_NAME
+                log "Pushing $BRANCH_NAME branch to $REPO_NAME repository"
+                log verbose "git push origin $BRANCH_NAME"
                 git push origin $BRANCH_NAME
             else
-                out warning "$BRANCH_NAME branch already exists. Skipping..."
+                log warning "$BRANCH_NAME branch already exists. Skipping..."
                 continue
             fi
         done
         cd ..
-        out "Deleting local repository"
+        log "Deleting local repository"
+        log verbose "rm -R $REPO_NAME"
         rm -R $REPO_NAME
     done
 }
@@ -716,21 +825,23 @@ function delete_repository {
     local PROJECT_NAME=$2
     local REPO_NAME=$3
     local DEFAULT_JSON=$4
-    out "Checking if $REPO_NAME repository already exists"
+    log "Checking if $REPO_NAME repository already exists"
+    log verbose "az repos list --project $PROJECT_NAME --query "[?name=='$REPO_NAME'].id" --organization https://dev.azure.com/$ORG_NAME --output tsv"
     REPO_ID=$(az repos list --project "$PROJECT_NAME" --query "[?name=='$REPO_NAME'].id" --organization "https://dev.azure.com/$ORG_NAME" --output tsv)
     if [ ! -z "$REPO_ID" ]; then
-        out "Repository $REPO_NAME found"
+        log "Repository $REPO_NAME found"
     else
-        out warning "Repository $REPO_NAME not found. Skipping..."
+        log warning "Repository $REPO_NAME not found. Skipping..."
         return 1
     fi  
-    out "Deleting $REPO_NAME repository"
+    log "Deleting $REPO_NAME repository"
+    log verbose "az repos delete --id $REPO_ID --project $REPO_NAME --organization https://dev.azure.com/$ORG_NAME --yes --verbose"
     az repos delete --id "$REPO_ID" --project "$REPO_NAME" --organization "https://dev.azure.com/$ORG_NAME" --yes --verbose
     if [ $? -eq 0 ]; then
-        out success "$REPO_NAME repository created successfully"
+        log success "$REPO_NAME repository created successfully"
     else
-        out error "Failed to create $REPO_NAME repository"
-        exit 1
+        log error "Failed to create $REPO_NAME repository"
+        return 1
     fi
 }
 function create_work_items {
@@ -775,31 +886,48 @@ function create_pipeline_environments {
     local ORG_NAME=$1
     local PROJECT_NAME=$2
     local DEFAULT_JSON=$3
-    out "Creating environments in $PROJECT_NAME project"
+    local PAT=$4
+    log "Creating environments in $PROJECT_NAME project"
     for ENVIRONMENT in $(echo "$DEFAULT_JSON" | jq -r '.pipeline.environments[] | @base64'); do
         ENVIRONMENT_JSON=$(echo "$ENVIRONMENT" | base64 --decode | jq -r '.')
+        log verbose "ENVIRONMENT_JSON: $ENVIRONMENT_JSON"
         NAME=$(echo "$ENVIRONMENT_JSON" | jq -r '.name')
+        log verbose "NAME: $NAME"
         DESCRIPTION=$(echo "$ENVIRONMENT_JSON" | jq -r '.description')
+        log verbose "DESCRIPTION: $DESCRIPTION"
+        log verbose "Url: https://dev.azure.com/$ORG_NAME/$PROJECT_NAME/_apis/distributedtask/environments?api-version=5.0-preview.1"
         RESPONSE=$(curl --silent \
+            --write-out "\n%{http_code}" \
             --header "Authorization: Basic $(echo -n :$PAT | base64)" \
             --header "Content-Type: application/json" \
             "https://dev.azure.com/$ORG_NAME/$PROJECT_NAME/_apis/distributedtask/environments?api-version=5.0-preview.1")
-        if [[ $(echo "$RESPONSE" | jq '.value[] | select(.name == "'"$NAME"'") | length') -gt 0 ]]; then
-            out warning "$NAME environment already exists. Skipping..."
+        HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+        log verbose "Response code: $HTTP_STATUS"
+        RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+        log verbose "Response body: $RESPONSE_BODY"
+        if [ $HTTP_STATUS != 200 -a $(echo "$RESPONSE_BODY" | jq '.value[] | select(.name == "'"$NAME"'") | length') -gt 0 ]; then
+            log warning "$NAME environment already exists. Skipping..."
             continue
         else
-            out "$NAME environment does not exist"
+            log "$NAME environment does not exist"
         fi
-        out "Creating $NAME environment..."
+        log "Creating $NAME environment..."
+        log verbose "Request: {\"name\": \"$NAME\",\"description\": \"$DESCRIPTION\"}"
+        log verbose "Url: https://dev.azure.com/$ORG_NAME/$PROJECT_NAME/_apis/distributedtask/environments?api-version=5.0-preview.1"
         RESPONSE=$(curl --silent \
+            --write-out "\n%{http_code}" \
             --header "Authorization: Basic $(echo -n :$PAT | base64)" \
             --header "Content-Type: application/json" \
             --data-raw '{"name": "'"$NAME"'","description": "'"$DESCRIPTION"'"}' \
             "https://dev.azure.com/$ORG_NAME/$PROJECT_NAME/_apis/distributedtask/environments?api-version=5.0-preview.1")
-        if [ "$RESPONSE" == "200" ]; then
-            out success "Environment $NAME succesfully created"
+        HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+        log verbose "Response code: $HTTP_STATUS"
+        RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+        log verbose "Response body: $RESPONSE_BODY"
+        if [ $HTTP_STATUS != 200 ]; then
+            log success "Environment $NAME succesfully created"
         else
-            out error "Failed to create $NAME environment. $RESPONSE"
+            log error "Failed to create $NAME environment. $RESPONSE"
         fi
     done
 }
@@ -840,18 +968,36 @@ function create_pipeline_pipelines {
     local ORG_NAME=$1
     local PROJECT_NAME=$2
     local DEFAULT_JSON=$3
-    out "Creating pipelines in $PROJECT_NAME project"
+    local PAT=$4
+    log "Creating pipelines in $PROJECT_NAME project"
     for PIPELINE in $(echo "$DEFAULT_JSON" | jq -r '.pipeline.pipelines[] | @base64'); do
         PIPELINE_JSON=$(echo "$PIPELINE" | base64 --decode | jq -r '.')
+        log verbose "PIPELINE_JSON: $PIPELINE_JSON"
         NAME=$(echo "$PIPELINE_JSON" | jq -r '.name')
+        log verbose "NAME: $NAME"
         REPO_NAME=$(echo "$PIPELINE_JSON" | jq -r '.repository_name')
-        out "Checking if $NAME pipeline already exists"
+        log verbose "REPO_NAME: $REPO_NAME"
+        FOLDER_NAME=$(echo "$PIPELINE_JSON" | jq -r '.folder_name')
+        log verbose "FOLDER_NAME: $FOLDER_NAME"
+        PIPELINE_PATH=$(echo "$PIPELINE_JSON" | jq -r '.pipeline_path')
+        log verbose "PIPELINE_PATH: $PIPELINE_PATH"
+        log "Checking if $NAME pipeline already exists"
+        log verbose "az pipelines show --name $NAME --project $PROJECT_NAME --org https://dev.azure.com/$ORG_NAME"
         RESPONSE=$(az pipelines show --name "$NAME" --project "$PROJECT_NAME" --org "https://dev.azure.com/$ORG_NAME")
         if [ -z "$RESPONSE" ]; then
-            out "$NAME piepline does not exist"
+            log "$NAME piepline does not exist"
         else
-            out warning "$NAME piepline already exists. Skipping..."
+            log warning "$NAME piepline already exists. Skipping..."
             continue
+        fi
+        log "Reading ID of the $REPO_NAME repository"
+        log verbose "az repos show --repository $REPO_NAME --query id --output tsv --org https://dev.azure.com/$ORG_NAME --project $PROJECT_NAME"
+        REPO_ID=$(az repos show --repository "$REPO_NAME" --query id --output tsv --org "https://dev.azure.com/$ORG_NAME" --project "$PROJECT_NAME")
+        if [ $? -eq 0 ]; then
+            log success "The ID of the $REPO_NAME repository is $REPO_ID"
+        else
+            log error  "Error during the reading of the property ID of the $REPO_NAME"
+            return 1
         fi
         out "Creating $NAME pipeline..."
         # Currently the module is broken and there is a prioroty one to fix it.
@@ -868,56 +1014,75 @@ function create_pipeline_pipelines {
         #     --header "Content-Type: application/json" \
         #     --data-raw '{"configuration": {"repository": {"url": "'"https://dev.azure.com/$ORG_NAME/$PROJECT_NAME/_git/$REPO_NAME"'", "type": "azureReposGit", "name": "default"}},"folderPath": "/","name": "'"$NAME"'","type": "yaml","queueId": 2}' \
         #     "https://dev.azure.com/$ORG_NAME/$PROJECT_NAME/_apis/pipelines?api-version=7.0" 
-        # curl --silent -v \
-        #     --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-        #     --header "Content-Type: application/json" \
-        #     --data-raw '{"configuration": {"type": "yaml"},"folder": "/","name": "'"$NAME"'"}' \
-        #     "https://dev.azure.com/$ORG_NAME/$PROJECT_NAME/_apis/pipelines?api-version=7.0" 
+        log verbose 'Request: {"folder": "'$FOLDER_NAME'","name": "'$NAME'","configuration": {"type": "yaml","path": "'$PIPELINE_PATH'","repository": {"id": "'$REPO_ID'","name": "'$REPO_NAME'","type": "azureReposGit"}}}'
+        log verbose "Url: https://dev.azure.com/$ORG_NAME/$PROJECT_NAME/_apis/pipelines?api-version=7.0"
+        RESPONSE=$(curl --silent \
+            --write-out "\n%{http_code}" \
+            --request POST \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json" \
+            --data-raw '{"folder": "'$FOLDER_NAME'","name": "'$NAME'","configuration": {"type": "yaml","path": "'$PIPELINE_PATH'","repository": {"id": "'$REPO_ID'","name": "'$REPO_NAME'","type": "azureReposGit"}}}' \
+            "https://dev.azure.com/$ORG_NAME/$PROJECT_NAME/_apis/pipelines?api-version=7.0")
+        HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+        log verbose "Response code: $HTTP_STATUS"
+        RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+        log verbose "Response body: $RESPONSE_BODY"
+        if [ $HTTP_STATUS != 200 ]; then
+            log error "Failed to create $NAME pipeline. $RESPONSE_BODY"
+            return 1;
+        else
+            log success "$NAME pipeline created successfully"
+        fi
     done
 }
 function assing_security_groups_to_environments {
     local ORG_NAME=$1
-    local PROJECT_NAME=$2
-    local DEFAULT_JSON=$3
-    out "Assign security groups to environments in $PROJECT_NAME project"
+    local PROJECT_ID=$2
+    local PROJECT_NAME=$3
+    local DEFAULT_JSON=$4
+    log "Assign security groups to environments in $PROJECT_NAME project"
     for ENVIRONMENT in $(echo "$DEFAULT_JSON" | jq -r '.pipeline.environments[] | @base64'); do
         ENVIRONMENT_JSON=$(echo "$ENVIRONMENT" | base64 --decode | jq -r '.')
+        log verbose "ENVIRONMENT_JSON: $ENVIRONMENT_JSON"
         ENVIRONMENT_NAME=$(echo "$ENVIRONMENT_JSON" | jq -r '.name')
-        out "Get project ID by $PROJECT_NAME"
-        PROJECT_ID=$(az devops project show --project $PROJECT_NAME | jq -r '.id')
-         if [ $? -eq 0 ]; then
-            out success "The ID of the $PROJECT_NAME project is $PROJECT_ID"
-        else
-            out error "Error during the reading of the property ID of the $PROJECT_ID"
-            exit 1
-        fi
+        log verbose "ENVIRONMENT_NAME: $ENVIRONMENT_NAME"
         for SECURITY_GROUP in $(echo "${ENVIRONMENT_JSON}" | jq -r '.security_groups_name[] | @base64'); do
             SECURITY_GROUP_JSON=$(echo "${SECURITY_GROUP}" | base64 --decode)
+            log verbose "SECURITY_GROUP_JSON: $SECURITY_GROUP_JSON"
             NAME=$(echo "${SECURITY_GROUP_JSON}" | jq -r '.name')
+            log verbose "NAME: $NAME"
             ROLE=$(echo "${SECURITY_GROUP_JSON}" | jq -r '.role_name')
-            out "Get security group ID for $NAME"
+            log verbose "ROLE: $ROLE"
+            log "Get security group ID for $NAME"
             SECURITY_GROUP_ID=$(az devops security group list --project $PROJECT_NAME --org https://dev.azure.com/$ORG_NAME --output json | jq -r '.graphGroups[] | select(.displayName == "'"$NAME"'") | .originId')
             if [ $? -eq 0 ]; then
-                out success "The ID of the $NAME security group is $SECURITY_GROUP_ID"
+                log success "The ID of the $NAME security group is $SECURITY_GROUP_ID"
             else
-                out error "Error during the reading of the property ID of the $NAME security group"
-                exit 1
+                log error "Error during the reading of the property ID of the $NAME security group"
+                return 1
             fi
-            echo "Get evnironment ID by $ENVIRONMENT_NAME"
+            log "Get evnironment ID by $ENVIRONMENT_NAME"
+            log verbose "Url: https://dev.azure.com/$ORG_NAME/$PROJECT_NAME/_apis/distributedtask/environments?api-version=5.0-preview.1"
             RESPONSE=$(curl --silent \
                 --write-out "\n%{http_code}" \
                 --header "Authorization: Basic $(echo -n :$PAT | base64)" \
                 --header "Content-Type: application/json" \
                 "https://dev.azure.com/$ORG_NAME/$PROJECT_NAME/_apis/distributedtask/environments?api-version=5.0-preview.1")
             HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+            log verbose "Response code: $HTTP_STATUS"
             RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+            log verbose "Response body: $RESPONSE_BODY"
             if [ $HTTP_STATUS != 200 ]; then
-                out error "Failed to get the $NAME environment ID. $RESPONSE"
-                exit 1;
+                log error "Failed to get the $NAME environment ID. $RESPONSE"
+                return 1;
             else
-                out success "The ID of the $ENVIRONMENT_NAME environment was succesfully retrieved"
+                log success "The ID of the $ENVIRONMENT_NAME environment was succesfully retrieved"
             fi
             ENVIRONMENT_ID=$(echo "$RESPONSE_BODY" | jq '.value[] | select(.name == "'"$ENVIRONMENT_NAME"'") | .id' | tr -d '"')  
+            log verbose "ENVIRONMENT_ID: $ENVIRONMENT_ID"
+            log "Associate the $NAME security group to the $ENVIRONMENT_NAME environment"
+            log verbose "Request: '[{"roleName": "'"$ROLE"'","userId": "'"$SECURITY_GROUP_ID"'"}]'"
+            log verbose "Url: https://dev.azure.com/$ORG_NAME/_apis/securityroles/scopes/distributedtask.environmentreferencerole/roleassignments/resources/$PROJECT_ID"_"$ENVIRONMENT_ID?api-version=5.0-preview.1"
             RESPONSE=$(curl --silent \
                 --write-out "\n%{http_code}" \
                 --request PUT \
@@ -926,40 +1091,27 @@ function assing_security_groups_to_environments {
                 --data-raw '[{"roleName": "'"$ROLE"'","userId": "'"$SECURITY_GROUP_ID"'"}]' \
                 "https://dev.azure.com/$ORG_NAME/_apis/securityroles/scopes/distributedtask.environmentreferencerole/roleassignments/resources/$PROJECT_ID"_"$ENVIRONMENT_ID?api-version=5.0-preview.1")
             HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+            log verbose "Response code: $HTTP_STATUS"
             RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-            out "Response body: $RESPONSE_BODY"
+            log verbose "Response body: $RESPONSE_BODY"
             if [ $HTTP_STATUS != 200 ]; then
-                out error "Failed to associate the $NAME security group to the $ENVIRONMENT_NAME environment. $RESPONSE"
-                exit 1;
+                log error "Failed to associate the $NAME security group to the $ENVIRONMENT_NAME environment. $RESPONSE"
+                return 1;
             else
-                out success "The $NAME security group was successfully associated to the $ENVIRONMENT_NAME environment"
+                log success "The $NAME security group was successfully associated to the $ENVIRONMENT_NAME environment"
             fi
         done
     done
 }
 function create_service_endpoints {
-    local ORG_NAME=$1
-    local PROJECT_NAME=$2
-    local DEFAULT_JSON=$3
-    out "Create service endpoints in $PROJECT_NAME project"
-    out "Read organization ID. This property is needed to get a list of service endpoints"
-    RESPONSE=$(curl --silent \
-            --write-out "\n%{http_code}" \
-            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-            --header "Content-Type: application/json" \
-            --data-raw '{"contributionIds": ["ms.vss-features.my-organizations-data-provider"],"dataProviderContext":{"properties":{}}}' \
-            "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
-    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-    if [ $HTTP_STATUS != 200 ]; then
-        out error "Failed to get the list of existing service endpoints. $RESPONSE"
-        exit 1;
-    else
-        out success "The list of existing service endpoints was succesfully retrieved"
-    fi
-    ORG_ID=$(echo "$RESPONSE_BODY" | jq '.dataProviders."ms.vss-features.my-organizations-data-provider".organizations[] | select(.name == "'"$ORG_NAME"'") | .id' | tr -d '"')
-    out "The ID of the $ORG_NAME organization is $ORG_ID"
-    out "Read the list of existing service endpoints"
+    local ORG_ID=$1
+    local ORG_NAME=$2
+    local PROJECT_NAME=$3
+    local DEFAULT_JSON=$4
+    log "Create service endpoints in $PROJECT_NAME project"
+    log "Read the list of existing service endpoints"
+    log verbose 'Request: {"contributionIds":["ms.vss-distributed-task.resources-hub-query-data-provider"],"dataProviderContext":{"properties":{"resourceFilters":{"createdBy":[],"resourceType":[],"searchText":""},"sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/'$PROJECT_NAME'/_settings/adminservices","routeId":"ms.vss-admin-web.project-admin-hub-route","routeValues":{"project":"Sample","adminPivot":"adminservices","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}'
+    log verbose "Url: https://dev.azure.com/$ORG_NAME/$PROJECT_NAME/_apis/distributedtask/serviceendpoints?api-version=5.1-preview.1"
     RESPONSE=$(curl --silent \
             --request POST \
             --write-out "\n%{http_code}" \
@@ -968,123 +1120,122 @@ function create_service_endpoints {
             --data-raw '{"contributionIds":["ms.vss-distributed-task.resources-hub-query-data-provider"],"dataProviderContext":{"properties":{"resourceFilters":{"createdBy":[],"resourceType":[],"searchText":""},"sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/'$PROJECT_NAME'/_settings/adminservices","routeId":"ms.vss-admin-web.project-admin-hub-route","routeValues":{"project":"Sample","adminPivot":"adminservices","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
             "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    log verbose "Response code: $HTTP_STATUS"
     SERVICE_ENDPOINT_LIST_RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    log verbose "Response body: $SERVICE_ENDPOINT_LIST_RESPONSE_BODY"
     if [ $HTTP_STATUS != 200 ]; then
-        out error "Failed to get the list of existing service endpoints. $RESPONSE"
-        exit 1;
+        log error "Failed to get the list of existing service endpoints. $RESPONSE"
+        return 1;
     else
-        out success "The list of existing service endpoints was succesfully retrieved"
+        log success "The list of existing service endpoints was succesfully retrieved"
     fi
-    out $SERVICE_ENDPOINT_LIST_RESPONSE_BODY
     for SERVICE_ENDPOINT in $(echo "$DEFAULT_JSON" | jq -r '.pipeline.service_endpoints[] | @base64'); do
         SERVICE_ENDPOINT_JSON=$(echo "$SERVICE_ENDPOINT" | base64 --decode | jq -r '.')
-        out "Creating Azure service endpoint"
+        log verbose "SERVICE_ENDPOINT_JSON: $SERVICE_ENDPOINT_JSON"
+        log "Creating Azure service endpoint"
         for AZURE_SERVICE_ENDPOINT in $(echo "$SERVICE_ENDPOINT_JSON" | jq -r '.azurerm[] | @base64'); do
             AZURE_SERVICE_ENDPOINT_JSON=$(echo "$AZURE_SERVICE_ENDPOINT" | base64 --decode | jq -r '.')
+            log verbose "AZURE_SERVICE_ENDPOINT_JSON: $AZURE_SERVICE_ENDPOINT_JSON"
             NAME=$(echo "$AZURE_SERVICE_ENDPOINT_JSON" | jq -r '.name')
+            log verbose "NAME: $NAME"
             TENANT_ID=$(echo "$AZURE_SERVICE_ENDPOINT_JSON" | jq -r '.tenant_id')
+            log verbose "TENANT_ID: $TENANT_ID"
             SUBSCRIPTION_ID=$(echo "$AZURE_SERVICE_ENDPOINT_JSON" | jq -r '.subscription_id')
+            log verbose "SUBSCRIPTION_ID: $SUBSCRIPTION_ID"
             SUBSCRIPTION_NAME=$(echo "$AZURE_SERVICE_ENDPOINT_JSON" | jq -r '.subscription_name')
+            log verbose "SUBSCRIPTION_NAME: $SUBSCRIPTION_NAME"
             SERVICE_PRINCIPAL_ID=$(echo "$AZURE_SERVICE_ENDPOINT_JSON" | jq -r '.service_principal_id')
+            log verbose "SERVICE_PRINCIPAL_ID: $SERVICE_PRINCIPAL_ID"
             # AZURE_SERVICE_CONNECTION_SERVICE_PRINCIPAL_KEY=$(echo "$AZURE_SERVICE_ENDPOINT_JSON" | jq -r '.service_principal_key')
-            out "Checking if $NAME service endpoint already exists"      
+            log "Checking if $NAME service endpoint already exists"      
             if [ $(echo "$SERVICE_ENDPOINT_LIST_RESPONSE_BODY" | jq '.dataProviders."ms.vss-distributed-task.resources-hub-query-data-provider".resourceItems[] | select(.name == "'"$NAME"'") | length') -gt 0 ]; then
-                out "$NAME service endpoint already exists. Skipping..."
+                log "$NAME service endpoint already exists. Skipping..."
                 continue
             else
-                out "$NAME service endpoint does not exist."
+                log "$NAME service endpoint does not exist."
             fi
-            out "Creating $NAME service endpoint"
+            log "Creating $NAME service endpoint"
+            log verbose "Command: az devops service-endpoint azurerm create --azure-rm-service-principal-id $SERVICE_PRINCIPAL_ID --azure-rm-subscription-id $SUBSCRIPTION_ID --azure-rm-subscription-name $SUBSCRIPTION_NAME --azure-rm-tenant-id $TENANT_ID --name $NAME --organization https://dev.azure.com/$ORG_NAME --project $PROJECT_NAME --output json"
             RESPONSE=$(az devops service-endpoint azurerm create --azure-rm-service-principal-id "$SERVICE_PRINCIPAL_ID" --azure-rm-subscription-id "$SUBSCRIPTION_ID" --azure-rm-subscription-name "$SUBSCRIPTION_NAME" --azure-rm-tenant-id "$TENANT_ID" --name "$NAME" --organization "https://dev.azure.com/$ORG_NAME" --project "$PROJECT_NAME" --output json)
             if [ $? -eq 0 ]; then
-                out success "The $NAME service endpoint was successfully created"
+                log success "The $NAME service endpoint was successfully created"
             else
-                out error "Error during the creation of the $NAME service endpoint"
-                exit 1
+                log error "Error during the creation of the $NAME service endpoint"
+                return 1
             fi
         done
         for GITHUB_SERVICE_ENDPOINT in $(echo "$SERVICE_ENDPOINT_JSON" | jq -r '.github[] | @base64'); do
             GITHUB_SERVICE_ENDPOINT_JSON=$(echo "$GITHUB_SERVICE_ENDPOINT" | base64 --decode | jq -r '.')
+            log verbose "GITHUB_SERVICE_ENDPOINT_JSON: $GITHUB_SERVICE_ENDPOINT_JSON"
             NAME=$(echo "$GITHUB_SERVICE_ENDPOINT_JSON" | jq -r '.name')
+            log verbose "NAME: $NAME"
             URL=$(echo "$GITHUB_SERVICE_ENDPOINT_JSON" | jq -r '.url')
+            log verbose "URL: $URL"
             # AZURE_DEVOPS_EXT_GITHUB_PAT=$(echo "$GITHUB_SERVICE_ENDPOINT_JSON" | jq -r '.token')
-            out "Checking if $NAME service endpoint already exists"  
+            log "Checking if $NAME service endpoint already exists"  
             if [[ $(echo "$SERVICE_ENDPOINT_LIST_RESPONSE_BODY" | jq '.dataProviders."ms.vss-distributed-task.resources-hub-query-data-provider".resourceItems[] | select(.name == "'"$NAME"'") | length') -gt 0 ]]; then
-                out "$NAME service endpoint already exists. Skipping..."
+                log "$NAME service endpoint already exists. Skipping..."
                 continue
             else
-                out "$NAME service endpoint does not exist."
+                log "$NAME service endpoint does not exist."
             fi
-            out "Creating $NAME service endpoint"
+            log "Creating $NAME service endpoint"
+            log verbose "Command: az devops service-endpoint github create --github-url $URL --name $NAME --organization https://dev.azure.com/$ORG_NAME --project $PROJECT_NAME --output json"
             RESPONSE=$(az devops service-endpoint github create --github-url "$URL" --name "$NAME" --organization "https://dev.azure.com/$ORG_NAME" --project "$PROJECT_NAME" --output json)
             if [ $? -eq 0 ]; then
-                out success "The $NAME service endpoint was successfully created"
+                log success "The $NAME service endpoint was successfully created"
             else
-                out error "Error during the creation of the $NAME service endpoint"
-                exit 1
+                log error "Error during the creation of the $NAME service endpoint"
+                return 1
             fi
         done
     done
 }
 function create_agent_pools {
-    local ORG_NAME=$1
-    local PROJECT_NAME=$2
-    local DEFAULT_JSON=$3
-    out "Creating agent pools in $PROJECT_NAME project"
-    out "Read organization ID by $ORG_NAME. This property is needed to get a list of service endpoints"
-    RESPONSE=$(curl --silent \
-            --write-out "\n%{http_code}" \
-            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
-            --header "Content-Type: application/json" \
-            --data-raw '{"contributionIds": ["ms.vss-features.my-organizations-data-provider"],"dataProviderContext":{"properties":{}}}' \
-            "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
-    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
-    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-    if [ $HTTP_STATUS != 200 ]; then
-        out error "Failed to get the list of existing service endpoints. $RESPONSE"
-        exit 1;
-    else
-        out success "The list of existing service endpoints was succesfully retrieved"
-    fi
-    ORG_ID=$(echo "$RESPONSE_BODY" | jq '.dataProviders."ms.vss-features.my-organizations-data-provider".organizations[] | select(.name == "'"$ORG_NAME"'") | .id' | tr -d '"')
-    out "The ID of the $ORG_NAME organization is $ORG_ID"
-    out "Get project ID by $PROJECT_NAME"
-    PROJECT_ID=$(az devops project show --project $PROJECT_NAME | jq -r '.id')
-    if [ $? -eq 0 ]; then
-        out success "The ID of the $PROJECT_NAME project is $PROJECT_ID"
-    else
-        out error "Error during the reading of the property ID of the $PROJECT_ID"
-        exit 1
-    fi
-    out "Get the list of agent pools"
+    local ORG_ID=$1
+    local ORG_NAME=$2
+    local PROJECT_NAME=$3
+    local PROJECT_ID=$4
+    local DEFAULT_JSON=$5
+    log "Creating agent pools in $PROJECT_NAME project"
+    log "Get the list of agent pools"
+    log verbose "Url: https://dev.azure.com/$ORG_NAME/$PROJECT_NAME/_apis/distributedtask/queues?api-version=5.0-preview.1"
     RESPONSE=$(curl --silent \
             --write-out "\n%{http_code}" \
             --header "Authorization: Basic $(echo -n :$PAT | base64)" \
             --header "Content-Type: application/json" \
             "https://dev.azure.com/$ORG_NAME/$PROJECT_NAME/_apis/distributedtask/queues?api-version=5.0-preview.1")
     HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    log verbose "Response code: $HTTP_STATUS"
     AGENT_POOL_LIST_RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    log verbose "Response body: $AGENT_POOL_LIST_RESPONSE_BODY"
     if [ $HTTP_STATUS != 200 ]; then
-        out error "Failed to get the list of existing pools. $RESPONSE"
-        exit 1;
+        log error "Failed to get the list of existing pools. $RESPONSE"
+        return 1;
     else
-        out success "The list of existing pools was succesfully retrieved"
+        log success "The list of existing pools was succesfully retrieved"
     fi
     for AGENT_POOL in $(echo "$DEFAULT_JSON" | jq -r '.pipeline.agent_pools[] | @base64'); do
         AGENT_POOL_JSON=$(echo "$AGENT_POOL" | base64 --decode | jq -r '.')
-        out "Creating self-hosted agents"
+        log verbose "AGENT_POOL_JSON: $AGENT_POOL_JSON"
+        log "Creating self-hosted agents"
         for SELF_HOSTED_AGENT_POOL in $(echo "$AGENT_POOL_JSON" | jq -r '.self_hosted[] | @base64'); do
             SELF_HOSTED_AGENT_POOL_JSON=$(echo "$SELF_HOSTED_AGENT_POOL" | base64 --decode | jq -r '.')
+            log verbose "SELF_HOSTED_AGENT_POOL_JSON: $SELF_HOSTED_AGENT_POOL_JSON"
             NAME=$(echo "$SELF_HOSTED_AGENT_POOL_JSON" | jq -r '.name')
+            log verbose "NAME: $NAME"
             AUTH_PIPELINES=$(echo "$AGENT_POOL_JSON" | jq -r '.authorize_pipelines')
-            out "Check if the $NAME agent pool already exists"
+            log verbose "AUTH_PIPELINES: $AUTH_PIPELINES"
+            log "Check if the $NAME agent pool already exists"
             if [[ $(echo "$AGENT_POOL_LIST_RESPONSE_BODY" | jq '.value[] | select(.name == "'"$NAME"'") | length') -gt 0 ]]; then
-                out warning "$NAME agent pool already exists. Skipping..."
+                log warning "$NAME agent pool already exists. Skipping..."
                 continue
             else
-                out "$NAME agent pool does not exist."
+                log "$NAME agent pool does not exist."
             fi
-            echo "Create $NAME self-hosted agent pool"
+            log "Create $NAME self-hosted agent pool"
+            log verbose 'Request: {"name": "'"$NAME"'"}'  
+            log verbose "Url: https://dev.azure.com/$ORG_NAME/$PROJECT_NAME/_apis/distributedtask/queues?authorizePipelines=$AUTH_PIPELINES&api-version=5.0-preview.1"
             RESPONSE=$(curl --silent \
                 --write-out "\n%{http_code}" \
                 --header "Authorization: Basic $(echo -n :$PAT | base64)" \
@@ -1092,57 +1243,81 @@ function create_agent_pools {
                 --data-raw '{"name": "'"$NAME"'"}' \
                 "https://dev.azure.com/$ORG_NAME/$PROJECT_NAME/_apis/distributedtask/queues?authorizePipelines=$AUTH_PIPELINES&api-version=5.0-preview.1")
             HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+            log verbose "Response code: $HTTP_STATUS"
             RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+            log verbose "Response body: $RESPONSE_BODY"
             if [ $HTTP_STATUS != 200 ]; then
-                out error "Failed to create the $NAME agent pool. $RESPONSE"
-                exit 1;
+                log error "Failed to create the $NAME agent pool. $RESPONSE"
+                return 1;
             else
-                out success "The $NAME agent pool was successfully created"
+                log success "The $NAME agent pool was successfully created"
             fi
         done
-        out "Creating azure virtual machine scale set agents"
+        log "Creating azure virtual machine scale set agents"
         for AZURE_HOSTED_AGENT_POOL in $(echo "$AGENT_POOL_JSON" | jq -r '.azure_virtual_machine_scale_sets[] | @base64'); do
             AZURE_HOSTED_AGENT_POOL_JSON=$(echo "$AZURE_HOSTED_AGENT_POOL" | base64 --decode | jq -r '.')
+            log verbose "AZURE_HOSTED_AGENT_POOL_JSON: $AZURE_HOSTED_AGENT_POOL_JSON"
             NAME=$(echo "$AZURE_HOSTED_AGENT_POOL_JSON" | jq -r '.name')
+            log verbose "NAME: $NAME"
             AUTH_PIPELINES=$(echo "$AZURE_HOSTED_AGENT_POOL_JSON" | jq -r '.authorize_pipelines')
+            log verbose "AUTH_PIPELINES: $AUTH_PIPELINES"
             SERVICE_ENDPOINT_NAME=$(echo "$AZURE_HOSTED_AGENT_POOL_JSON" | jq -r '.service_endpoint_name')
+            log verbose "SERVICE_ENDPOINT_NAME: $SERVICE_ENDPOINT_NAME"
             AUTO_PROVISIONING_PROJECT_POOLS=$(echo "$AZURE_HOSTED_AGENT_POOL_JSON" | jq -r '.auto_provision_project_pools')
+            log verbose "AUTO_PROVISIONING_PROJECT_POOLS: $AUTO_PROVISIONING_PROJECT_POOLS"
             AZURE_RESOURCE_GROUP_NAME=$(echo "$AZURE_HOSTED_AGENT_POOL_JSON" | jq -r '.azure_resource_group_name')
+            log verbose "AZURE_RESOURCE_GROUP_NAME: $AZURE_RESOURCE_GROUP_NAME"
             AZURE_VIRTUAL_MACHINE_SCALE_SET_NAME=$(echo "$AZURE_HOSTED_AGENT_POOL_JSON" | jq -r '.azure_virtual_machine_scale_set_name')
+            log verbose "AZURE_VIRTUAL_MACHINE_SCALE_SET_NAME: $AZURE_VIRTUAL_MACHINE_SCALE_SET_NAME"
             DESIRED_IDLE=$(echo "$AZURE_HOSTED_AGENT_POOL_JSON" | jq -r '.desired_idle')
+            log verbose "DESIRED_IDLE: $DESIRED_IDLE"
             MAX_CAPACITY=$(echo "$AZURE_HOSTED_AGENT_POOL_JSON" | jq -r '.max_capacity')
+            log verbose "MAX_CAPACITY: $MAX_CAPACITY"
             OS_TYPE=$(echo "$AZURE_HOSTED_AGENT_POOL_JSON" | jq -r '.os_type')
+            log verbose "OS_TYPE: $OS_TYPE"
             MAX_SAVED_NODE_COUNT=$(echo "$AZURE_HOSTED_AGENT_POOL_JSON" | jq -r '.max_saved_node_count')
+            log verbose "MAX_SAVED_NODE_COUNT: $MAX_SAVED_NODE_COUNT"
             RECYCLE_AFTER_EACH_USE=$(echo "$AZURE_HOSTED_AGENT_POOL_JSON" | jq -r '.recycle_after_each_use')
+            log verbose "RECYCLE_AFTER_EACH_USE: $RECYCLE_AFTER_EACH_USE"
             TIME_TO_LIVE_MINUTES=$(echo "$AZURE_HOSTED_AGENT_POOL_JSON" | jq -r '.time_to_live_minutes')
-            out "Check if the $NAME agent pool already exists"
+            log verbose "TIME_TO_LIVE_MINUTES: $TIME_TO_LIVE_MINUTES"
+            log "Check if the $NAME agent pool already exists"
             if [[ $(echo "$AGENT_POOL_LIST_RESPONSE_BODY" | jq '.value[] | select(.name == "'"$NAME"'") | length') -gt 0 ]]; then
-                out warning "$NAME agent pool already exists. Skipping..."
+                log warning "$NAME agent pool already exists. Skipping..."
                 continue
             else
-                out "$NAME agent pool does not exist."
+                log "$NAME agent pool does not exist."
             fi
-            out "Read the list of existing service endpoints. Needed to configure the VMSS."
+            log "Read the list of existing service endpoints. Needed to configure the VMSS."
+            log verbose "Url: https://dev.azure.com/$ORG_NAME/$PROJECT_ID/_apis/serviceendpoint/endpoints?type=azurerm&api-version=6.0-preview.4"
             RESPONSE=$(curl --silent \
                 --write-out "\n%{http_code}" \
                 --header "Authorization: Basic $(echo -n :$PAT | base64)" \
                 --header "Content-Type: application/json" \
                 "https://dev.azure.com/$ORG_NAME/$PROJECT_ID/_apis/serviceendpoint/endpoints?type=azurerm&api-version=6.0-preview.4")
             HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+            log verbose "Response code: $HTTP_STATUS"
             RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
-            echo $RESPONSE_BODY
+            log verbose "Response body: $RESPONSE_BODY"
             if [ $HTTP_STATUS != 200 ]; then
-                out error "Failed to get the list of existing service endpoints. $RESPONSE"
-                exit 1;
+                log error "Failed to get the list of existing service endpoints. $RESPONSE"
+                return 1;
             else
-                out success "The list of existing service endpoints was succesfully retrieved"
+                log success "The list of existing service endpoints was succesfully retrieved"
             fi
             SERVICE_ENDPOINT=$(echo "$RESPONSE_BODY" | jq -r '.value[] | select(.name == "'"$SERVICE_ENDPOINT_NAME"'")')
+            log verbose "SERVICE_ENDPOINT: $SERVICE_ENDPOINT"
             SERVICE_ENDPOINT_ID=$(echo "$SERVICE_ENDPOINT" | jq -r '.id')
+            log verbose "SERVICE_ENDPOINT_ID: $SERVICE_ENDPOINT_ID"
             SERVICE_ENDPOINT_TENANT_ID=$(echo "$SERVICE_ENDPOINT" | jq -r '.authorization.parameters.tenantid')
+            log verbose "SERVICE_ENDPOINT_TENANT_ID: $SERVICE_ENDPOINT_TENANT_ID"
             SERVICE_ENDPOINT_SCOPE=$(echo "$SERVICE_ENDPOINT" | jq -r '.serviceEndpointProjectReferences[] | select(.projectReference.name == "'"$PROJECT_NAME"'") | .projectReference.id')
+            log verbose "SERVICE_ENDPOINT_SCOPE: $SERVICE_ENDPOINT_SCOPE"
             SERVICE_ENDPOINT_SUBSCRIPTION_ID=$(echo "$SERVICE_ENDPOINT" | jq -r '.data.subscriptionId')
-            echo "Create $NAME virtual machine scale set agent pool"
+            log verbose "SERVICE_ENDPOINT_SUBSCRIPTION_ID: $SERVICE_ENDPOINT_SUBSCRIPTION_ID"
+            log "Create $NAME virtual machine scale set agent pool"
+            log verbose 'Request {"agentInteractiveUI":false,"azureId":"/subscriptions/'$SERVICE_ENDPOINT_SUBSCRIPTION_ID'/resourceGroups/'$AZURE_RESOURCE_GROUP_NAME'/providers/Microsoft.Compute/virtualMachineScaleSets/'$AZURE_VIRTUAL_MACHINE_SCALE_SET_NAME'","desiredIdle":'$DESIRED_IDLE',"maxCapacity":'$MAX_CAPACITY',"osType":'$OS_TYPE',"maxSavedNodeCount":'$MAX_SAVED_NODE_COUNT',"recycleAfterEachUse":'$RECYCLE_AFTER_EACH_USE',"serviceEndpointId":"'$SERVICE_ENDPOINT_ID'","serviceEndpointScope":"'$SERVICE_ENDPOINT_SCOPE'","timeToLiveMinutes":'$TIME_TO_LIVE_MINUTES'}'
+            log verbose "Url: https://dev.azure.com/$ORG_NAME/$PROJECT_ID/_apis/distributedtask/pools?api-version=6.0-preview.1"
             RESPONSE=$(curl --silent \
                 --request POST \
                 --write-out "\n%{http_code}" \
@@ -1151,30 +1326,28 @@ function create_agent_pools {
                 --data-raw '{"agentInteractiveUI":false,"azureId":"/subscriptions/'$SERVICE_ENDPOINT_SUBSCRIPTION_ID'/resourceGroups/'$AZURE_RESOURCE_GROUP_NAME'/providers/Microsoft.Compute/virtualMachineScaleSets/'$AZURE_VIRTUAL_MACHINE_SCALE_SET_NAME'","desiredIdle":'$DESIRED_IDLE',"maxCapacity":'$MAX_CAPACITY',"osType":'$OS_TYPE',"maxSavedNodeCount":'$MAX_SAVED_NODE_COUNT',"recycleAfterEachUse":'$RECYCLE_AFTER_EACH_USE',"serviceEndpointId":"'$SERVICE_ENDPOINT_ID'","serviceEndpointScope":"'$SERVICE_ENDPOINT_SCOPE'","timeToLiveMinutes":'$TIME_TO_LIVE_MINUTES'}' \
                 "https://dev.azure.com/$ORG_NAME/_apis/distributedtask/elasticpools?poolName=$NAME&authorizeAllPipelines=$AUTH_PIPELINES&autoProvisionProjectPools=$AUTO_PROVISIONING_PROJECT_POOLS&projectId=$PROJECT_ID&api-version=6.1-preview.1")
             HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+            log verbose "Response code: $HTTP_STATUS"
             RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+            log verbose "Response body: $RESPONSE_BODY"
             if [ $HTTP_STATUS != 200 ]; then
-                out error "Failed to create the $NAME agent pool. $RESPONSE"
-                exit 1;
+                log error "Failed to create the $NAME agent pool. $RESPONSE"
+                return 1;
             else
-                out success "The $NAME agent pool was successfully created"
+                log success "The $NAME agent pool was successfully created"
             fi
         done
     done 
 }
-function create_branch_protection_policies {
-    echo "Creating branch protection policies in the $PROJECT_NAME project"
+function create_repositories_branch_protection_policies {
+    # echo "Creating branch protection policies in the $PROJECT_NAME project"
+
+    
 
     # echo "Creating Approver count policies"
-    # I need to check if already exists, otherwise the cretion will fail
+    # # I need to check if already exists, otherwise the cretion will fail
     # for APPROVER_COUNT_POLICY in $(echo "$DEFAULT_JSON" | jq -r '.repository.policies.approver_count[] | @base64'); do
-    #     APPROVER_COUNT_POLICY_JSON=$(echo "$APPROVER_COUNT_POLICY" | base64 --decode | jq -r '.')
-    #     REPO_NAME=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.repository_name')
-    #     BRANCH_NAME=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.branch_name')
-    #     BRANCH_MATCH_TYPE=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.branch_match_type')
-    #     ALLOW_DOWNVOTES=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.allow_downvotes')
-    #     CREATOR_VOTE_COUNT=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.creator_vote_counts')
-    #     MINIMAL_APPROVER_COUNT=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.minimum_approver_count')
-    #     RESET_ON_SOURCE_PUSH=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.reset_on_source_push')
+    
+
     #     out "Reading ID of the $REPO_NAME repository"
     #     REPO_ID=$(az repos show --repository "$REPO_NAME" --query id --output tsv --org "https://dev.azure.com/$ORG_NAME" --project "$PROJECT_NAME")
     #     if [ $? -eq 0 ]; then
@@ -1183,6 +1356,34 @@ function create_branch_protection_policies {
     #         out error  "Error during the reading of the property ID of the $REPO_NAME"
     #         exit 1
     #     fi
+
+    # out "Check if the $ORG_NAME organization is already connected to Azure Active Directory"
+    # RESPONSE=$(curl --silent \
+    #         --write-out "\n%{http_code}" \
+    #         --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+    #         --header "Content-Type: application/json" \
+    #         --data-raw '{"contributionIds":["ms.vss-code-web.branch-policies-data-provider"],"dataProviderContext":{"properties":{"projectId":"'$PROJECT_ID'","repositoryId":"'$REPO_ID'","refName":"refs/heads/'$BRANCH_NAME'","sourcePage":{"url":"https://dev.azure.com/'$ORG_NAME'/'$PROJECT_NAME'/_settings/repositories?_a=policiesMid&repo='$REPO_ID'&refs=refs/heads/'$BRANCH_NAME'","routeId":"ms.vss-admin-web.project-admin-hub-route","routeValues":{"project":"'$PROJECT_NAME'","adminPivot":"repositories","controller":"ContributedPage","action":"Execute","serviceHost":"'$ORG_ID' ('$ORG_NAME')"}}}}}' \
+    #         "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    # HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    # RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    # if [ $HTTP_STATUS != 200 ]; then
+    #     out error "Error during the retrieval of the list of existing Azure Active Directories"
+    #     exit 1;
+    # else
+    #     out success "The list of existing Azure Active Directories was retrieved successfully"
+    # fi
+
+
+
+    #     APPROVER_COUNT_POLICY_JSON=$(echo "$APPROVER_COUNT_POLICY" | base64 --decode | jq -r '.')
+    #     REPO_NAME=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.repository_name')
+    #     BRANCH_NAME=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.branch_name')
+    #     BRANCH_MATCH_TYPE=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.branch_match_type')
+    #     ALLOW_DOWNVOTES=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.allow_downvotes')
+    #     CREATOR_VOTE_COUNT=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.creator_vote_counts')
+    #     MINIMAL_APPROVER_COUNT=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.minimum_approver_count')
+    #     RESET_ON_SOURCE_PUSH=$(echo "$APPROVER_COUNT_POLICY_JSON" | jq -r '.reset_on_source_push')
+
     #     out "Creating approver count policy for the $BRANCH_NAME in $REPO_NAME repository"
     #     az repos policy approver-count create --branch-match-type $BRANCH_MATCH_TYPE --allow-downvotes $ALLOW_DOWNVOTES --blocking true --branch $BRANCH_NAME --creator-vote-counts $CREATOR_VOTE_COUNT --enabled true --minimum-approver-count $MINIMAL_APPROVER_COUNT --repository-id $REPO_ID --reset-on-source-push $RESET_ON_SOURCE_PUSH --project "$PROJECT_NAME" --organization "https://dev.azure.com/$ORG_NAME" --verbose
     #     if [ $? -eq 0 ]; then
@@ -1395,6 +1596,48 @@ function create_branch_protection_policies {
     done
 }
 
+# ==================== UTILITIES =======================
+function get_organization_id {
+    local ORG_NAME=$1
+    local PAT=$2
+    log "Read organization ID by $ORG_NAME"
+    log verbose 'Request: {"contributionIds": ["ms.vss-features.my-organizations-data-provider"],"dataProviderContext":{"properties":{}}}'
+    log verbose "Url: https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1"
+    RESPONSE=$(curl --silent \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json" \
+            --data-raw '{"contributionIds": ["ms.vss-features.my-organizations-data-provider"],"dataProviderContext":{"properties":{}}}' \
+            "https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    log verbose "Response HTTP status: $HTTP_STATUS"
+    RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    log verbose "Response body: $RESPONSE_BODY"
+    if [ $HTTP_STATUS != 200 ]; then
+        log error "Error during the reading of the organization ID"
+        exit 1;
+    else
+        log success "Organization ID was read successfully"
+    fi
+    ORG_ID=$(echo "$RESPONSE_BODY" | jq '.dataProviders."ms.vss-features.my-organizations-data-provider".organizations[] | select(.name == "'"$ORG_NAME"'") | .id' | tr -d '"')
+    log debug "Organization ID: $ORG_ID"
+    echo $ORG_ID
+}
+function get_project_id {
+    local ORG_NAME=$1
+    local PROJECT_NAME=$2
+    log "Get project ID by $PROJECT_NAME"
+    log verbose "Command: az devops project show --project $PROJECT_NAME"
+    PROJECT_ID=$(az devops project show --project $PROJECT_NAME | jq -r '.id')
+    if [ $? -eq 0 ]; then
+        log success "Project ID was read successfully"
+    else
+        log error "Error during the reading of the project ID"
+        exit 1
+    fi
+    log debug "Project ID: $PROJECT_ID"
+    echo $PROJECT_ID
+}
 # TODO
 # VERBOSE=false
 # for arg in "$@"; do
@@ -1407,29 +1650,139 @@ function create_branch_protection_policies {
 #     echo $VERBOSE
 # done
 
-PAT=""
+# PAT="tztx3ds7lzkysr5xfp7gizn32se5rclyuxmj3tr5ejx7tqe4c7na" # porta.ivan@outlook.com / gtrekter
+PAT="km67kgvvf6yiwbe2vwe63gapbm3623or5a2nwwut2rt5z3y22suq" # porta.ivan@outlook.com / ivanporta
+# PAT="pfah3t2ofpo7mslu7tauswyytydxoepgucfm6koorz4zqqp4c7sq" # josh.skywalker@outlook.com /ivanporta
+# export AZURE_DEVOPS_EXT_PAT=$PAT
 DEFAULT_JSON=$(cat config.json)
 ORG_NAME=$(echo "$DEFAULT_JSON" | jq -r '.organization.name')
 
 # ==================== GENERAL =========================
 # authenticate_to_azure_devops $ORG_NAME
 # ==================== ORGANIZATION ====================
+ORG_ID=$(get_organization_id $ORG_NAME $PAT)
+# out "[] Add users to the $ORG_NAME organization"
 # add_users_to_organization $ORG_NAME "$DEFAULT_JSON"
-# configure_organization_policies $ORG_NAME "$DEFAULT_JSON"
-# configure_organization_settings $ORG_NAME "$DEFAULT_JSON"
+# if [ $? -eq 0 ]; then
+#     out success "\r[x] Add users to the $ORG_NAME organization\n"
+# else
+#     out error "\r[] Add users to the $ORG_NAME organization\n"
+#     exit 1
+# fi
+# out "[] Configure organization policies"
+# configure_organization_policies $ORG_ID $ORG_NAME "$DEFAULT_JSON" $PAT
+# if [ $? -eq 0 ]; then
+#     out success "\r[x] Configure organization policies\n"
+# else
+#     out error "\r[] Configure organization policies\n"
+#     exit 1
+# fi
+# out "[] Configure organization settings"
+# configure_organization_settings $ORG_ID $ORG_NAME "$DEFAULT_JSON" $PAT
+# if [ $? -eq 0 ]; then
+#     out success "\r[x] Configure organization settings\n"
+# else
+#     out error "\r[] Configure organization settings\n"
+#     exit 1
+# fi
+# out "[] Connect to Azure Active Directory"
 # connecting_organization_to_azure_active_directory $ORG_NAME "$DEFAULT_JSON"
+# if [ $? -eq 0 ]; then
+#     out success "\r[x] Connect to Azure Active Directory\n"
+# else
+#     out error "\r[] Connect to Azure Active Directory\n"
+#     exit 1
+# fi
+# out "[] Configure organization extensions"
 # install_extensions_in_organization $ORG_NAME "$DEFAULT_JSON"
+# if [ $? -eq 0 ]; then
+#     out success "\r[x] Configure organization extensions\n"
+# else
+#     out error "\r[] Configure organization extensions\n"
+#     exit 1
+# fi
+# out "[] Configure organization repositories"
 # configure_organization_repositories $ORG_NAME "$DEFAULT_JSON"
-PROJECT_NAME=$(echo "$DEFAULT_JSON" | jq -r '.organization.project.name')
+# if [ $? -eq 0 ]; then
+#     out success "\r[x] Configure organization repositories\n"
+# else
+#     out error "\r[] Configure organization repositories\n"
+#     exit 1
+# fi
 # ==================== PROJECT =========================
+PROJECT_NAME=$(echo "$DEFAULT_JSON" | jq -r '.organization.project.name')
+# out "[] Create project $PROJECT_NAME"
 # create_project $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
-# create_security_groups $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON" # To fix
+# if [ $? -eq 0 ]; then
+#     out success "\r[x] Create project $PROJECT_NAME\n"
+# else
+#     out error "\r[] Create project $PROJECT_NAME\n"
+#     exit 1
+# fi
+PROJECT_ID=$(get_project_id $ORG_NAME $PROJECT_NAME)
+# out "[] Create security groups"
+# create_security_groups $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
+# if [ $? -eq 0 ]; then
+#     out success "\r[x] Create security groups\n"
+# else
+#     out error "\r[] Create security groups\n"
+#     exit 1
+# fi
+# out "[] Create project repositories"  
 # create_repositories $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
+# if [ $? -eq 0 ]; then
+#     out success "\r[x] Create project repositories\n"
+# else
+#     out error "\r[] Create project repositories\n"
+#     exit 1
+# fi
+# create_repositories_branch_protection_policies $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
+# out "[] Delete default repository"
 # delete_repository $ORG_NAME $PROJECT_NAME $PROJECT_NAME "$DEFAULT_JSON"
+# if [ $? -eq 0 ]; then
+#     out success "\r[x] Delete default repository\n"
+# else
+#     out error "\r[] Delete default repository\n"
+#     exit 1
+# fi
 # create_work_items $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON" # Add check if the workitem exists
-# create_pipeline_environments $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
-# create_pipeline_pipelines $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
-# assing_security_groups_to_environments $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
-# create_service_endpoints $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
-# create_agent_pools $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
-create_branch_protection_policies $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
+# out "[] Create pipelines environments"
+# create_pipeline_environments $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON" $PAT
+# if [ $? -eq 0 ]; then
+#     out success "\r[x] Create pipelines environments\n"
+# else
+#     out error "\r[] Create pipelines environments\n"
+#     exit 1
+# fi
+# out "[] Create pipelines"
+# create_pipeline_pipelines $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON" $PAT
+# if [ $? -eq 0 ]; then
+#     out success "\r[x] Create pipelines\n"
+# else
+#     out error "\r[] Create pipelines\n"
+#     exit 1
+# fi
+# out "[] Assign security groups to environments"
+# assing_security_groups_to_environments $ORG_NAME $PROJECT_ID $PROJECT_NAME "$DEFAULT_JSON"
+# if [ $? -eq 0 ]; then
+#     out success "\r[x] Assign security groups to environments\n"
+# else
+#     out error "\r[] Assign security groups to environments\n"
+#     exit 1
+# fi
+# out "[] Create service endpoints. To check logs"
+# create_service_endpoints $ORG_ID $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
+# if [ $? -eq 0 ]; then
+#     out success "\r[x] Create service endpoints\n"
+# else
+#     out error "\r[] Create service endpoints\n"
+#     exit 1
+# fi
+# out "[] Create agent pools"
+# create_agent_pools $ORG_ID $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
+# if [ $? -eq 0 ]; then
+#     out success "\r[x] Create agent pools\n"
+# else
+#     out error "\r[] Create agent pools\n"
+#     exit 1
+# fi
