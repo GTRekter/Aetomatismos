@@ -51,7 +51,7 @@ function authenticate_to_azure_devops {
     log "Authenticating to Azure DevOps"
     log verbose "Organization: $ORG_NAME"
     log verbose "Command: az devops login --organization https://dev.azure.com/$ORG_NAME"
-    echo $PAT | az devops login --organization https://dev.azure.com/$ORG_NAME
+    echo "$PAT" | az devops login --organization https://dev.azure.com/$ORG_NAME
     if [ $? -eq 0 ]; then
         log success "Authentication to Azure DevOps successfull"
     else
