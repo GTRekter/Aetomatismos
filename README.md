@@ -9,12 +9,12 @@ This repository contains a bash script that will create and configure Azure DevO
 |Organization|Remove user from organization|az devops user remove|[https://learn.microsoft.com/en-us/cli/azure/devops/user?view=azure-cli-latest#az-devops-user-remove](https://learn.microsoft.com/en-us/cli/azure/devops/user?view=azure-cli-latest#az-devops-user-remove)|✔|❌|
 |Organization|Create project in organization|az devops project create|[https://learn.microsoft.com/en-us/cli/azure/devops/project?view=azure-cli-latest#az-devops-project-create](https://learn.microsoft.com/en-us/cli/azure/devops/project?view=azure-cli-latest#az-devops-project-create)|✔|✔|
 |Organization|Delete project from organization|az devops project delete|[https://learn.microsoft.com/en-us/cli/azure/devops/project?view=azure-cli-latest#az-devops-project-delete](https://learn.microsoft.com/en-us/cli/azure/devops/project?view=azure-cli-latest#az-devops-project-delete)|✔|❌|
-|Organization|Connect your organization to Azure Active Directory|||❌|❌|
+|Organization|Connect your organization to Azure Active Directory|https://dev.azure.com/<org-name>/_settings/organizationAad||❌|✔|
 |Organization|Application connection policies|||❌|❌|
 |Organization|Security policies|||❌|❌|
 |Organization|User policies|||❌|❌|
 |Organization|Project collection permissions|||❌|❌|
-|Organization|Invite guests users|||❌|❌|
+|Organization|Invite guests users|https://dev.azure.com/<org-name>/_apis/OrganizationPolicy/Policies/Policy.DisallowAadGuestUserAccess?api-version=5.0-preview.1||❌|✔|
 |Project|Service connection creation|az devops service-endpoint azurerm create|[https://learn.microsoft.com/en-us/cli/azure/devops/service-endpoint/azurerm?view=azure-cli-latest#az-devops-service-endpoint-azurerm-create](https://learn.microsoft.com/en-us/cli/azure/devops/service-endpoint/azurerm?view=azure-cli-latest#az-devops-service-endpoint-azurerm-create)|✔|❌|
 |Project|Service connection deletion|az devops service-endpoint azurerm delete|[https://learn.microsoft.com/en-us/cli/azure/devops/service-endpoint?view=azure-cli-latest#az-devops-service-endpoint-delete](https://learn.microsoft.com/en-us/cli/azure/devops/service-endpoint?view=azure-cli-latest#az-devops-service-endpoint-delete)|✔|❌|
 |Project|Create security group creation|az devops security group create|[https://learn.microsoft.com/en-us/cli/azure/devops/security/group?view=azure-cli-latest#az-devops-security-group-create](https://learn.microsoft.com/en-us/cli/azure/devops/security/group?view=azure-cli-latest#az-devops-security-group-create)|✔|✔|
