@@ -1,27 +1,23 @@
 {
     "organization": {
-        "name": "portaivan",
+        "name": "name-of-your-organization",
         "azure_active_directory": {
-            "tenant_id": ""
+            "tenant_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
         },
         "users": [
             {
-                "name": "",
-                "email": ""
+                "name": "user-fullname",
+                "email": "user@domain.com"
             }
         ],
         "extensions": [
-            {
-                "id": "azure-pipelines-tasks-terraform",
-                "publisher_id": "charleszipp"
-            },
             {
                 "id":"conflicts-tab",
                 "publisher_id":"ms-devlabs"
             }
         ],
         "project": {
-            "name": "Sample",
+            "name": "",
             "security_groups": [
                 {
                     "name": "Connectivity approvers",
@@ -33,22 +29,6 @@
                 },
                 {
                     "name": "Management approvers",
-                    "description": "Users who are allowed to approve the deployment of the Terraform configuration to the production environment"
-                },
-                {
-                    "name": "Azure DNS approvers",
-                    "description": "Users who are allowed to approve the deployment of the Terraform configuration to the production environment"
-                },
-                {
-                    "name": "Azure Firewall approvers",
-                    "description": "Users who are allowed to approve the deployment of the Terraform configuration to the production environment"
-                },
-                {
-                    "name": "Landing Zone approvers",
-                    "description": "Users who are allowed to approve the deployment of the Terraform configuration to the production environment"
-                },
-                {
-                    "name": "Security approvers",
                     "description": "Users who are allowed to approve the deployment of the Terraform configuration to the production environment"
                 }
             ]
@@ -64,7 +44,7 @@
             "allow_team_and_project_administrators_to_invite_new_users": true,
             "request_access": {
                 "enable": false,
-                "url": "https://dev.azure.com/GTRekter"
+                "url": "https://www.example.com"
             }
         },
         "settings": {
@@ -90,750 +70,59 @@
     "board": {
         "epics": [
             {
-                "title": "Prequisites",
-                "description": "The following prequisites must be met before the project can begin",
+                "title": "Epic title 01",
+                "description": "Epic description",
                 "features": [
                     {
-                        "title": "Setup Azure and Azure DevOps",
-                        "description": "The following prequisites must be met before the project can begin",
+                        "title": "Feature title 01",
+                        "description": "Feature description",
                         "product_backlog_items": [
                             {
-                                "title": "Configure Azure DevOps",
-                                "description": "",
+                                "title": "Product backlog item title",
+                                "description": "Product backlog item description",
                                 "tasks": [
                                     {
-                                        "title": "Create Azure DevOps organization" 
+                                        "title": "Task title 01" 
                                     },
                                     {
-                                        "title": "Connect Azure DevOps to Azure AD" 
-                                    },
-                                    {
-                                        "title": "Create Azure DevOps project" 
-                                    },
-                                    {
-                                        "title": "Assign custom domain"
-                                    },
-                                    {
-                                        "title": "Enable guest access to the Azure DevOps project"
-                                    }
-                                ]
-                            },
-                            {
-                                "title": "Configure Azure Tenant",
-                                "description": "",
-                                "tasks": [
-                                    {
-                                        "title":"Signup for Azure AD Premium"
-                                    },
-                                    {
-                                        "title":"Add company branding"
-                                    },
-                                    {
-                                        "title": "Add privacy info"
-                                    },
-                                    {
-                                        "title": "Configure Stay-Signed-In"
-                                    },
-                                    {
-                                        "title": "Enforce MFA for login"
-                                    },
-                                    {
-                                        "title": "Register encryption-at-host provider for all subscriptions"
-                                    },
-                                    {
-                                        "title": "Delete Global Admin from PIM"
-                                    }
-                                ]
-                            },                   
-                            {
-                                "title": "Create Azure subscriptions",
-                                "description": "",
-                                "tasks": [
-                                    {
-                                        "title": "Create the Management subscription"
-                                    },
-                                    {
-                                        "title": "Create the Connectivity subscription"
-                                    },
-                                    {
-                                        "title": "Create the Identity subscription"
-                                    },
-                                    {
-                                        "title": "Create the Landing Zone subscription"
-                                    }
-                                ]
-                            },
-                            {
-                                "title": "Create Repositories",
-                                "description": "",
-                                "tasks": [
-                                    {
-                                        "title": "Create the AD Groups RBAC repository"
-                                    },
-                                    {
-                                        "title": "Create the Azure DNS repository"
-                                    },
-                                    {
-                                        "title": "Create the Azure DNS pipelines repository"
-                                    },
-                                    {
-                                        "title": "Create the Azure Firewall repository"
-                                    },
-                                    {
-                                        "title": "Create the Connectivity repository"
-                                    },
-                                    {
-                                        "title": "Create the Connectivity pipelines repository"
-                                    },
-                                    {
-                                        "title": "Create the Identity repository"
-                                    },
-                                    {
-                                        "title": "Create the Identity pipelines repository"
-                                    },
-                                    {
-                                        "title": "Create the Management repository"
-                                    },
-                                    {
-                                        "title": "Create the Management pipelines repository"
-                                    },
-                                    {
-                                        "title": "Create the Landing Zone repository"
-                                    },
-                                    {
-                                        "title": "Create the Landing Zone pipelines repository"
-                                    },
-                                    {
-                                        "title": "Create the Validation repository"
-                                    },
-                                    {
-                                        "title": "Create the Security repository"
-                                    }
-                                ]
-                            },
-                            {
-                                "title": "Create Repositories branch structure",
-                                "description": "",
-                                "tasks": [
-                                    {
-                                        "title": "Create the AD Groups RBAC repository releases/baseline branch"
-                                    },
-                                    {
-                                        "title": "Create the AD Groups RBAC repository features/baseline branch"
-                                    },
-                                    {
-                                        "title": "Create the Azure DNS repository releases/baseline branch"
-                                    },
-                                    {
-                                        "title": "Create the Azure DNS repository features/baseline branch"
-                                    },
-                                    {
-                                        "title": "Create the Azure DNS pipelines repository releases/baseline branch"
-                                    },
-                                    {
-                                        "title": "Create the Azure DNS pipelines repository features/baseline branch"
-                                    },
-                                    {
-                                        "title": "Create the Azure Firewall repository releases/baseline branch"
-                                    },
-                                    {
-                                        "title": "Create the Azure Firewall repository features/baseline branch"
-                                    },
-                                    {
-                                        "title": "Create the Connectivity repository releases/baseline branch"
-                                    },
-                                    {
-                                        "title": "Create the Connectivity repository features/baseline branch"
-                                    },
-                                    {
-                                        "title": "Create the Connectivity pipelines repository releases/baseline branch"
-                                    },
-                                    {
-                                        "title": "Create the Connectivity pipelines repository features/baseline branch"
-                                    },
-                                    {
-                                        "title": "Create the Identity repository releases/baseline branch"
-                                    },
-                                    {
-                                        "title": "Create the Identity repository features/baseline branch"
-                                    },
-                                    {
-                                        "title": "Create the Identity pipelines repository releases/baseline branch"
-                                    },
-                                    {
-                                        "title": "Create the Identity pipelines repository features/baseline branch"
-                                    },
-                                    {
-                                        "title": "Create the Management repository releases/baseline branch"
-                                    },
-                                    {
-                                        "title": "Create the Management repository features/baseline branch"
-                                    },
-                                    {
-                                        "title": "Create the Management pipelines repository releases/baseline branch"
-                                    },
-                                    {
-                                        "title": "Create the Management pipelines repository features/baseline branch"
-                                    },
-                                    {
-                                        "title": "Create the Landing Zone repository releases/baseline branch"
-                                    },
-                                    {
-                                        "title": "Create the Landing Zone repository features/baseline branch"
-                                    },
-                                    {
-                                        "title": "Create the Landing Zone pipelines repository releases/baseline branch"
-                                    },
-                                    {
-                                        "title": "Create the Landing Zone pipelines repository features/baseline branch"
-                                    },
-                                    {
-                                        "title": "Create the Validation repository releases/baseline branch"
-                                    },
-                                    {
-                                        "title": "Create the Validation repository features/baseline branch"
-                                    },
-                                    {
-                                        "title": "Create the Security repository releases/baseline branch"
-                                    },
-                                    {
-                                        "title": "Create the Security repository features/baseline branch"
+                                        "title": "Task title 02"
                                     }
                                 ]
                             }
                         ]
                     },
                     {
-                        "title": "Workshops",
-                        "description": "The following workshops must be completed before the project can begin",
+                        "title": "Feature title 02",
+                        "description": "Feature description",
                         "product_backlog_items": [
                             {
-                                "title": "Connectivity and Landing Zone workshop",
-                                "description": "",
+                                "title": "Product backlog item title",
+                                "description": "Product backlog item description",
                                 "tasks": [
                                     {
-                                        "title": "Identify Workshop Client Attendees"
+                                        "title": "Task title 01" 
                                     },
                                     {
-                                        "title": "Arrange Workshop"
-                                    },
-                                    {
-                                        "title": "Create Workshop Agenda"
-                                    },
-                                    {
-                                        "title": "Run Workshop"
-                                    },
-                                    {
-                                        "title": "Review Workshop Feedback"
-                                    },
-                                    {
-                                        "title": "Client actions from Workshop"
-                                    }
-                                ]
-                            },
-                            {
-                                "title": "Governance, Identity and Management Workshop",
-                                "description": "",
-                                "tasks": [
-                                    {
-                                        "title": "Identify Workshop Client Attendees"
-                                    },
-                                    {
-                                        "title": "Arrange Workshop"
-                                    },
-                                    {
-                                        "title": "Create Workshop Agenda"
-                                    },
-                                    {
-                                        "title": "Run Workshop"
-                                    },
-                                    {
-                                        "title": "Review Workshop Feedback"
-                                    },
-                                    {
-                                        "title": "Client actions from Workshop"
-                                    }
-                                ]
-                            },
-                            {
-                                "title": "DevOps Workshop",
-                                "description": "",
-                                "tasks": [
-                                    {
-                                        "title": "Identify Workshop Client Attendees"
-                                    },
-                                    {
-                                        "title": "Arrange Workshop"
-                                    },
-                                    {
-                                        "title": "Create Workshop Agenda"
-                                    },
-                                    {
-                                        "title": "Run Workshop"
-                                    },
-                                    {
-                                        "title": "Review Workshop Feedback"
-                                    },
-                                    {
-                                        "title": "Client actions from Workshop"
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        "title": "High Level Design",
-                        "description": "The following prequisites must be met before the project can begin",
-                        "product_backlog_items": [
-                            {
-                                "title": "Design High Level Design",
-                                "description": "",
-                                "tasks": [
-                                    {
-                                        "title": "Bastion"
-                                    },
-                                    {
-                                        "title": "DNS"                                       
-                                    },
-                                    {
-                                        "title": "Management group and subscriptions"                          
-                                    },
-                                    {
-                                        "title": "Networks"                            
-                                    },
-                                    {
-                                        "title": "Remote Access"                             
-                                    },
-                                    {
-                                        "title": "Resource tagging"                        
-                                    },
-                                    {
-                                        "title": "Assign IP Ranges to the Platform"                            
-                                    },
-                                    {
-                                        "title": "Azure policies"                        
-                                    },
-                                    {
-                                        "title": "Backup and Recovery"                             
-                                    },
-                                    {
-                                        "title": "Firewall"                             
-                                    },
-                                    {
-                                        "title": "Foundations about IaC Management"                            
-                                    },
-                                    {
-                                        "title": "Governance"                              
-                                    },
-                                    {
-                                        "title": "Infrastructure Architecture"                              
-                                    },
-                                    {
-                                        "title": "Logging"                                
-                                    },
-                                    {
-                                        "title": "Naming conventions"                          
-                                    },
-                                    {
-                                        "title": "Private Build agents"                           
-                                    },
-                                    {
-                                        "title": "RBAC standards"                          
-                                    },
-                                    {
-                                        "title": "Virtual Machine encryption"                             
-                                    }
-                                ]
-                            },
-                            {
-                                "title": "Review High Level Design",
-                                "description": "",
-                                "tasks": []
-                            },
-                            {
-                                "title": "Client sign off High Level Design",
-                                "description": "",
-                                "tasks": []
-                            }
-                        ]
-                    }
-                ]
-            },
-            {
-                "title": "Landing Zone development",
-                "description": "",
-                "features": [
-                    {
-                        "title": "Azure DevOps",
-                        "description": "",
-                        "product_backlog_items": [
-                            {
-                                "title": "Create service connections",
-                                "description": "",
-                                "tasks": [
-                                    {
-                                        "title": "Create service connection to the Connectivity subscription" 
-                                    },
-                                    {
-                                        "title": "Create service connection to the Identity subscription" 
-                                    },
-                                    {
-                                        "title": "Create service connection to the Management subscription" 
-                                    },
-                                    {
-                                        "title": "Create service connection to the Landing Zone subscription" 
-                                    }
-                                ]
-                            },
-                            {
-                                "title": "Create Azure DevOps pipeline environments",
-                                "description": "",
-                                "tasks": [
-                                    {
-                                        "title": "Create the Connectivity environment" 
-                                    },
-                                    {
-                                        "title": "Create the Identity environment" 
-                                    },
-                                    {
-                                        "title": "Create the Management environment" 
-                                    },
-                                    {
-                                        "title": "Create the Landing Zone environment" 
-                                    }
-                                ]
-                            },
-                            {
-                                "title": "Create Azure DevOps approval groups",
-                                "description": "",
-                                "tasks": [
-                                    {
-                                        "title": "Create the Connectivity approval group" 
-                                    },
-                                    {
-                                        "title": "Create the Identity approval group" 
-                                    },
-                                    {
-                                        "title": "Create the Management approval group" 
-                                    },
-                                    {
-                                        "title": "Create the Landing Zone approval group" 
-                                    }
-                                ]
-                            },
-                            {                    
-                                "title": "Assign approval groups to pipeline environments",
-                                "description": "",
-                                "tasks": [
-                                    {
-                                        "title": "Assign approval groups to Connectivity environment" 
-                                    },
-                                    {
-                                        "title": "Assign approval groups to Identity environment" 
-                                    },
-                                    {
-                                        "title": "Assign approval groups to Management environment" 
-                                    },
-                                    {
-                                        "title": "Assign approval groups to Landing Zone environment"  
-                                    }
-                                ]
-                            },
-                            {
-                                "title": "Create build policies",
-                                "description": "",
-                                "tasks": [
-                                    {
-                                        "title": "Create build policy for the main branch" 
-                                    },
-                                    {
-                                        "title": "Create build policy for the releases/* branch" 
-                                    }
-                                ]
-                            },
-                            {
-                                "title": "Create pipelines",
-                                "description": "",
-                                "tasks": [
-                                    {
-                                        "title": "Create Connectivity deployment pipeline" 
-                                    },
-                                    {
-                                        "title": "Create Connectivity validation pipeline" 
-                                    },
-                                    {
-                                        "title": "Create Identity deployment pipeline" 
-                                    },
-                                    {
-                                        "title": "Create Identity validation pipeline" 
-                                    },
-                                    {
-                                        "title": "Create Management deployment pipeline" 
-                                    },
-                                    {
-                                        "title": "Create Management validation pipeline" 
-                                    },
-                                    {
-                                        "title": "Create Landing Zone deployment pipeline" 
-                                    },
-                                    {
-                                        "title": "Create Landing Zone validation pipeline" 
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        "title": "Infrastructure as a Code",
-                        "description": "",
-                        "product_backlog_items": [
-                            {
-                                "title": "Privision resources for Terraform and Azure DevOps",
-                                "description": "",
-                                "tasks": [
-                                    {
-                                        "title": "Create Private Build Agent Pool" 
-                                    },
-                                    {
-                                        "title": "Create VMSS for Private Build Agents" 
-                                    },
-                                    {
-                                        "title": "Create Key Vault" 
-                                    },
-                                    {
-                                        "title": "Create Storage Account" 
-                                    }
-                                ]
-                            },
-                            {
-                                "title": "Add default terraform configuration",
-                                "description": "",
-                                "tasks": [
-                                    {
-                                        "title": "Add AD Groups RBAC default terraform configuration"
-                                    },
-                                    {
-                                        "title": "Update AD Groups RBAC parameters according to High Level Design"
-                                    },
-                                    {
-                                        "title": "Add Azure DNS default terraform configuration"
-                                    },
-                                    {
-                                        "title": "Add Azure DNS pipelines default terraform configuration"
-                                    },
-                                    {
-                                        "title": "Update Azure DNS parameters according to High Level Design"
-                                    },
-                                    {
-                                        "title": "Add Azure Firewall default terraform configuration"
-                                    },
-                                    {
-                                        "title": "Update Azure Firewall parameters according to High Level Design"
-                                    },
-                                    {
-                                        "title": "Add Connectivty default terraform configuration" 
-                                    },
-                                    {
-                                        "title": "Add Connectivty pipelines default terraform configuration" 
-                                    },
-                                    {
-                                        "title": "Update Connectivty parameters according to High Level Design"
-                                    },
-                                    {
-                                        "title": "Add Identity default terraform configuration" 
-                                    },
-                                    {
-                                        "title": "Add Identity pipelines default terraform configuration" 
-                                    },
-                                    {
-                                        "title": "Update Identity parameters according to High Level Design"
-                                    },
-                                    {
-                                        "title": "Add Management default terraform configuration" 
-                                    },
-                                    {
-                                        "title": "Add Management pipelines default terraform configuration" 
-                                    },
-                                    {
-                                        "title": "Update Management parameters according to High Level Design"
-                                    },
-                                    {
-                                        "title": "Add Landing Zone default terraform configuration" 
-                                    },
-                                    {
-                                        "title": "Add Landing Zone pipelines default terraform configuration" 
-                                    },
-                                    {
-                                        "title": "Update Landing Zone parameters according to High Level Design"
-                                    },
-                                    {
-                                        "title": "Add Validation default terraform configuration" 
-                                    },
-                                    {
-                                        "title": "Add Security default terraform configuration" 
-                                    }
-                                ]
-                            },
-                            {
-                                "title": "Deployment of the Landing Zone",
-                                "description": "",
-                                "tasks": [
-                                    {
-                                        "title": "Deployment Management" 
-                                    },
-                                    {
-                                        "title": "Deployment Identity" 
-                                    },
-                                    {
-                                        "title": "Deployment Connectivity" 
-                                    },
-                                    {
-                                        "title": "Deployment Landing Zone" 
-                                    },
-                                    {
-                                        "title": "Deployment Azure Policies" 
-                                    }
-                                ]
-                            },
-                            {
-                                "title": "RBAC and Resource Locks",
-                                "description": "",
-                                "tasks": [
-                                    {
-                                        "title": "Create Resource Group Security Groups & RBAC Access" 
-                                    },
-                                    {
-                                        "title": "Create Management Group Security Groups & RBAC Access" 
-                                    },
-                                    {
-                                        "title": "Create Subscription Security Groups & RBAC Access" 
-                                    },
-                                    {
-                                        "title": "Set up PIM on management groups " 
-                                    },
-                                    {
-                                        "title": "Set up PIM on Subscription groups " 
-                                    }
-                                ]
-                            },
-                            {
-                                "title": "Validation",
-                                "description": "",
-                                "tasks": [
-                                    {
-                                        "title": "Validate Connectivity configuration" 
-                                    },
-                                    {
-                                        "title": "Validate Identity configuration" 
-                                    },
-                                    {
-                                        "title": "Validate Management configuration" 
-                                    },
-                                    {
-                                        "title": "Validate Landing Zone configuration" 
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        "title": "Documentation",
-                        "description": "",
-                        "product_backlog_items": [
-                            {
-                                "title": "Create Bill of Materials",
-                                "description": "",
-                                "tasks": [
-                                    {
-                                        "title": "Create Management Bill of Materials" 
-                                    },
-                                    {
-                                        "title": "Create Identity Bill of Materials" 
-                                    },
-                                    {
-                                        "title": "Create Connectivity Bill of Materials" 
-                                    },
-                                    {
-                                        "title": "Create Landing Zone Bill of Materials" 
-                                    },
-                                    {
-                                        "title": "Create Firewall Bill of Materials" 
-                                    },
-                                    {
-                                        "title": "Create Azure Policy Bill of Materials" 
-                                    },
-                                    {
-                                        "title": "Create SOP - Add, edit or remove Azure Policy"
-                                    },
-                                    {
-                                        "title": "Create SOP - Run RBAC assignment pipeline"
-                                    },
-                                    {
-                                        "title": "Create SOP - Edit Connectivity Firewall Rules (AZFW)"
-                                    },
-                                    {
-                                        "title": "Create SOP - Edit Pipeline Approvers Group"
-                                    },
-                                    {
-                                        "title": "Create SOP - Edit Private DNS Zones and A Records"
-                                    },
-                                    {
-                                        "title": "Create SOP - Run a Pipeline"
-                                    },
-                                    {
-                                        "title": "Create Landing Zone request form"
+                                        "title": "Task title 02"
                                     }
                                 ]
                             }
                         ]
                     }
-                ]            
+                ]
             }
         ]
     },
     "repository" : {
         "repositories": [
             {
-                "name": "AD_Groups_RBAC"
-            },
-            {
-                "name": "Azure_DNS"
-            },
-            {
-                "name": "Azure_DNS_Pipelines"
-            },
-            {
-                "name": "AzFW_Rules_Global"
-            },
-            {
-                "name": "AzFW_Rules_Global_Pipelines"
-            },
-            {
                 "name": "Connectivity"
-            },
-            {
-                "name": "Connectivity_Pipelines"
             },
             {
                 "name": "Identity"
             },
             {
-                "name": "Identity_Pipelines"
-            },
-            {
                 "name": "Management"
-            },
-            {
-                "name": "Management_Pipelines"
-            },
-            {
-                "name": "Landing_Zone"
-            },
-            {
-                "name": "Landing_Zone_Pipelines"
-            },
-            {
-                "name": "Validation"
             },
             {
                 "name": "Security"
@@ -850,7 +139,7 @@
         "policies": {
             "approver_count" : [
                 {
-                    "repository_name": "Azure_DNS",
+                    "repository_name": "Connectivity",
                     "branch_name": "releases",
                     "branch_match_type": "prefix",
                     "creator_vote_counts": false,
@@ -861,19 +150,19 @@
             ],
             "case_enforcement": [
                 {
-                    "repository_name": "Azure_DNS"
+                    "repository_name": "Connectivity"
                 }
             ],
             "comment_required": [
                 {
-                    "repository_name": "Azure_DNS",
+                    "repository_name": "Connectivity",
                     "branch_name": "releases",
                     "branch_match_type": "prefix"
                 }
             ],
             "merge_strategy": [
                 {
-                    "repository_name": "Azure_DNS",
+                    "repository_name": "Connectivity",
                     "branch_name": "releases",
                     "branch_match_type": "prefix",
                     "allow_no_fast_forward": true,
@@ -884,31 +173,31 @@
             ],
             "work_item_linking": [
                 {
-                    "repository_name": "Azure_DNS",
+                    "repository_name": "Connectivity",
                     "branch_name": "releases",
                     "branch_match_type": "prefix"
                 }
             ],
             "required_reviewer": [
                 {
-                    "repository_name": "Azure_DNS",
+                    "repository_name": "Connectivity",
                     "branch_name": "releases",
                     "branch_match_type": "prefix",
                     "path_filter": "",
-                    "required_reviewer_emails": "porta.ivan@outlook.com",
-                    "message": "Ivan in required"
+                    "required_reviewer_emails": "user@domain.com",
+                    "message": "Please review this pull request"
                 }
             ],
             "build": [
                 {
-                    "repository_name": "Azure_DNS",
+                    "repository_name": "Connectivity",
                     "branch_name": "releases",
                     "branch_match_type": "prefix",
                     "valid_duration": 30,
                     "queue_on_source_update_only": true,
                     "manual_queue_only": true,
                     "display_name": "build validation",
-                    "build_definition_name": "Azure_DNS"
+                    "build_definition_name": "Connectivity"
                 }
             ]
         }
@@ -919,18 +208,16 @@
                 "azurerm": [
                     {
                         "name": "Azure Development",
-                        "tenant_id": "00434baa-68ec-4d73-b0a2-fec5bgtrekterac28891",
-                        "subscription_name": "Microsoft VSES",
-                        "subscription_id": "49bd11f3-09ce-4ecf-9f96-e026a292f054",
-                        "service_principal_id": "a89b4f53-1622-4a47-866c-0ae919250a7f",
-                        "service_principal_key": ""
+                        "tenant_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+                        "subscription_name": "Microsoft VSS",
+                        "subscription_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+                        "service_principal_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                     }
                 ],
                 "github": [
                     {
                         "name": "GitHub",
-                        "url": "https://github.com/GTRekter",
-                        "token": ""
+                        "url": "https://www.github.com/xxxxxx"
                     }
                 ]
             }
@@ -949,27 +236,27 @@
                 ],
                 "azure_virtual_machine_scale_sets": [
                     {
-                        "name":"Sample",
+                        "name": "",
                         "authorize_pipelines": false,
                         "auto_provision_project_pools": true,
-                        "azure_resource_group_name": "rg-training-dev",
-                        "azure_virtual_machine_scale_set_name": "vmss-training-dev-02",
+                        "azure_resource_group_name": "",
+                        "azure_virtual_machine_scale_set_name": "",
                         "desired_idle": 1,
                         "max_capacity": 2,
                         "os_type": 1,
                         "max_saved_node_count": 0,
                         "recycle_after_each_use": true,
                         "time_to_live_minutes": 30,
-                        "service_endpoint_name": "Sample"                   
+                        "service_endpoint_name": ""                   
                     }
                 ]
             }
         ],
         "pipelines": [
             {
-                "name": "Azure_DNS",
+                "name": "Connectivity",
                 "folder_name": "/",
-                "repository_name": "Azure_DNS",
+                "repository_name": "Connectivity",
                 "pipeline_path": "/azure_pipeline.yml"
             }
         ],
@@ -1000,16 +287,6 @@
                 "security_groups_name": [
                     {
                         "name": "Management approvers",
-                        "role_name": "User"
-                    }
-                ]
-            },
-            {
-                "name": "Landing Zone",
-                "description": "Landing Zone production environment",
-                "security_groups_name": [
-                    {
-                        "name": "Landing Zone approvers",
                         "role_name": "User"
                     }
                 ]
