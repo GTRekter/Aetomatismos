@@ -24,7 +24,7 @@ function out {
 }
 function log {
     local LEVEL=$1
-    local LOG_FILE="generation.log"
+    local LOG_FILE="mylog.log"
     local TIMESTAMP=$(date +"%Y-%m-%d %H:%M:%S")
     case "$LEVEL" in
         verbose)
@@ -1884,8 +1884,8 @@ function get_project_id {
 #     echo $VERBOSE
 # done
 
-PAT="" 
 DEFAULT_JSON=$(cat config.json)
+PAT=$(echo "$DEFAULT_JSON" | jq -r '.organization.pat')
 ORG_NAME=$(echo "$DEFAULT_JSON" | jq -r '.organization.name')
 
 # ==================== GENERAL =========================
