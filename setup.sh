@@ -1650,10 +1650,8 @@ function get_project_id {
 #     echo $VERBOSE
 # done
 
-# PAT="tztx3ds7lzkysr5xfp7gizn32se5rclyuxmj3tr5ejx7tqe4c7na" # porta.ivan@outlook.com / gtrekter
-PAT="km67kgvvf6yiwbe2vwe63gapbm3623or5a2nwwut2rt5z3y22suq" # porta.ivan@outlook.com / ivanporta
-# PAT="pfah3t2ofpo7mslu7tauswyytydxoepgucfm6koorz4zqqp4c7sq" # josh.skywalker@outlook.com /ivanporta
-# export AZURE_DEVOPS_EXT_PAT=$PAT
+
+PAT="" 
 DEFAULT_JSON=$(cat config.json)
 ORG_NAME=$(echo "$DEFAULT_JSON" | jq -r '.organization.name')
 
