@@ -47,10 +47,11 @@ function log {
 # ==================== ORGANIZATION ====================
 function authenticate_to_azure_devops {
     local ORG_NAME=$1
+    local PAT=$2
     log "Authenticating to Azure DevOps"
     log verbose "Organization: $ORG_NAME"
     log verbose "Command: az devops login --organization https://dev.azure.com/$ORG_NAME"
-    az devops login --organization https://dev.azure.com/$ORG_NAME
+    echo $PAT | az devops login --organization https://dev.azure.com/$ORG_NAME
     if [ $? -eq 0 ]; then
         log success "Authentication to Azure DevOps successfull"
     else
@@ -1889,7 +1890,7 @@ PAT=$(echo "$DEFAULT_JSON" | jq -r '.organization.pat')
 ORG_NAME=$(echo "$DEFAULT_JSON" | jq -r '.organization.name')
 
 # ==================== GENERAL =========================
-authenticate_to_azure_devops $ORG_NAME
+authenticate_to_azure_devops $ORG_NAME $PAT
 # ==================== ORGANIZATION ====================
 ORG_ID=$(get_organization_id $ORG_NAME $PAT)
 out "[] Add users to the $ORG_NAME organization"
