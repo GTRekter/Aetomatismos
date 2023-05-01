@@ -219,6 +219,8 @@ This repository contains a bash script that will create and configure Azure DevO
 
 ## Repos
 
+| Category | Feature | Command / URL | Documentation | Supported by Az CLI | Configured |
+|---|---|---|---|---|---|
 | Repos | Add Repository to project |  |  |  |  |
 | Repos | Get Repository from project |  |  |  |  |
 | Repos | Get Repository details |  |  |  |  |
