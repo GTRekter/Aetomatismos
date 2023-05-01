@@ -31,9 +31,9 @@ This repository contains a bash script that will create and configure Azure DevO
 | Organization | Configure organization security policies (Allow team and project administrators to invite new users) | https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.AllowTeamAdminsInvitationsAccessToken?api-version=5.0-preview.1 |  | ❌ | ✔ |
 | Organization | Configure organization security policies (Request access - URL) | https://vssps.dev.azure.com/$ORG_NAME/_apis/Organization/Collections/$ORG_ID/Properties?api-version=5.0-preview.1 |  | ❌ | ✔ |
 | Organization | Configure organization security policies (Request access) | https://dev.azure.com/$ORG_NAME/_apis/OrganizationPolicy/Policies/Policy.AllowRequestAccessToken?api-version=5.0-preview.1" |  | ❌ | ✔ |
-| Organization | Permissions | TBD |  |  |  |
-| Organization | Processes | TBD |  |  |  |
-| Organization | Agent pools | TBD |  |  |  |
+| Organization | Permissions | TBD |  | ❌ | ❌ |
+| Organization | Processes | TBD |  | ❌ | ❌ |
+| Organization | Agent pools | TBD |  | ❌ | ❌ |
 | Organization | Configure organization settings (Disable anonymous access to badges) | https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1 |  | ❌ | ✔ |
 | Organization | Configure organization settings (Limit variables that can be set at queue time) | https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1 |  | ❌ | ✔ |
 | Organization | Configure organization settings (Limit job authorization scope to current project for non-release pipelines) | https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1 |  | ❌ | ✔ |
@@ -44,63 +44,63 @@ This repository contains a bash script that will create and configure Azure DevO
 | Organization | Configure organization settings (Disable built-in tasks) | https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1 |  | ❌ | ✔ |
 | Organization | Configure organization settings (Disable Marketplace tasks) | https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1 |  | ❌ | ✔ |
 | Organization | Configure organization settings (Disable Node 6 tasks) | https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1 |  |❌  | ✔ |
-| Organization | Deployment pools | TBD |  |  |  |
-| Organization | Parallel jobs | TBD |  |  |  |
-| Organization | OAuth configurations | TBD |  |  |  |
-| Organization | Repositories settings |  |  |  |  |
-| Organization | Storage | TBD |  |  |  |
+| Organization | Deployment pools | TBD |  | ❌ | ❌ |
+| Organization | Parallel jobs | TBD |  |  | ❌ |
+| Organization | OAuth configurations |  |  | ❌ | ❌ |
+| Organization | Repositories settings |  |  | ❌ | ❌ |
+| Organization | Storage | TBD |  | ❌ | ❌ |
 
 ## Project 
 | Category | Feature | Command / URL | Documentation | Supported by Az CLI | Configured |
 |---|---|---|---|---|---|
-| Project | Add administrator to project | TBD |  |  |  |
-| Project | Get administrators from project | TBD |  |  |  |
-| Project | Get administrator details | TBD |  |  |  |
-| Project | Edit administrator details | TBD |  |  |  |
-| Project | Remove administrator from project | TBD |  |  |  |
-| Project | Enable Boards | TBD |  |  |  |
-| Project | Disable Boards | TBD |  |  |  |
-| Project | Enable Repos | TBD |  |  |  |
-| Project | Disable Repos | TBD |  |  |  |
-| Project | Enable Pipelines | TBD |  |  |  |
-| Project | Disable Pipelines | TBD |  |  |  |
-| Project | Enable Test Plans | TBD |  |  |  |
-| Project | Disable Test Plans | TBD |  |  |  |
-| Project | Enable Artifact | TBD |  |  |  |
-| Project | Disable Artifact | TBD |  |  |  |
-| Project | Add Team to project | TBD |  |  |  |
-| Project | Get Team from project | TBD |  |  |  |
-| Project | Get Team details | TBD |  |  |  |
-| Project | Edit Team details | TBD |  |  |  |
-| Project | Remove Team from project | TBD |  |  |  |
+| Project | Add administrator to project | TBD |  | ❌ | ❌ |
+| Project | Get administrators from project | TBD |  | ❌ | ❌ |
+| Project | Get administrator details | TBD |  | ❌ | ❌ |
+| Project | Edit administrator details | TBD |  | ❌ | ❌ |
+| Project | Remove administrator from project | TBD |  | ❌ | ❌ |
+| Project | Enable Boards | TBD |  | ❌ | ❌ |
+| Project | Disable Boards | TBD |  | ❌ | ❌ |
+| Project | Enable Repos | TBD |  | ❌ | ❌ |
+| Project | Disable Repos | TBD |  | ❌ | ❌ |
+| Project | Enable Pipelines | TBD |  | ❌ | ❌ |
+| Project | Disable Pipelines | TBD |  | ❌ | ❌ |
+| Project | Enable Test Plans | TBD |  | ❌ | ❌ |
+| Project | Disable Test Plans | TBD |  | ❌ | ❌ |
+| Project | Enable Artifact | TBD |  | ❌ | ❌ |
+| Project | Disable Artifact | TBD |  | ❌ | ❌ |
+| Project | Add Team to project | TBD |  | ❌ | ❌ |
+| Project | Get Team from project | TBD |  | ❌ | ❌ |
+| Project | Get Team details | TBD |  | ❌ | ❌ |
+| Project | Edit Team details | TBD |  | ❌ | ❌ |
+| Project | Remove Team from project | TBD |  | ❌ | ❌ |
 | Project | Add security group to project | az devops security group create | https://learn.microsoft.com/en-us/cli/azure/devops/security/group?view=azure-cli-latest#az-devops-security-group-create | ✔ | ✔ |
 | Project | Get security groups from project | az devops security group list | https://learn.microsoft.com/en-us/cli/azure/devops/security/group?view=azure-cli-latest#az-devops-security-group-list | ✔ | ✔ |
 | Project | Get security group details | az devops security group show | https://learn.microsoft.com/en-us/cli/azure/devops/security/group?view=azure-cli-latest#az-devops-security-group-show | ✔ | ✔ |
-| Project | Edit security group details | az devops security group update | https://learn.microsoft.com/en-us/cli/azure/devops/security/group?view=azure-cli-latest#az-devops-security-group-update | ✔ |  |
-| Project | Remove security group from project | az devops security group delete | https://learn.microsoft.com/en-us/cli/azure/devops/security/group?view=azure-cli-latest#az-devops-security-group-delete | ✔ |  |
-| Project | Add Service Hook to project | TBD |  |  |  |
-| Project | Get Service Hook from project | TBD |  |  |  |
-| Project | Get Service Hook details | TBD |  |  |  |
-| Project | Edit Service Hook details | TBD |  |  |  |
-| Project | Remove Service Hook from project | TBD |  |  |  |
-| Project | Dashboard settings (Create dashboards) | TBD |  |  |  |
-| Project | Dashboard settings (Edit dashboards) | TBD |  |  |  |
-| Project | Dashboard settings (Delete dashboards) | TBD |  |  |  |
-| Project | Add Iteration to project | TBD |  |  |  |
-| Project | Get Iteration from project | TBD |  |  |  |
-| Project | Get Iteration details | TBD |  |  |  |
-| Project | Edit Iteration details | TBD |  |  |  |
-| Project | Remove Iteration from project | TBD |  |  |  |
-| Project | Add Area to project | TBD |  |  |  |
-| Project | Get Area from project | TBD |  |  |  |
-| Project | Get Area details | TBD |  |  |  |
-| Project | Edit Area details | TBD |  |  |  |
-| Project | Remove Area from project | TBD |  |  |  |
-| Project | Edit team configuration (Backlog navigation levels Epics) | TBD |  |  |  |
-| Project | Edit team configuration (Backlog navigation levels Features) | TBD |  |  |  |
-| Project | Edit team configuration (Backlog navigation levels Stories) | TBD |  |  |  |
-| Project | Edit team configuration (Working days) | TBD |  |  |  |
-| Project | Edit team configuration (Working with bugs) | TBD |  |  |  |
+| Project | Edit security group details | az devops security group update | https://learn.microsoft.com/en-us/cli/azure/devops/security/group?view=azure-cli-latest#az-devops-security-group-update | ✔ | ❌ |
+| Project | Remove security group from project | az devops security group delete | https://learn.microsoft.com/en-us/cli/azure/devops/security/group?view=azure-cli-latest#az-devops-security-group-delete | ✔ | ❌ |
+| Project | Add Service Hook to project | TBD |  |  | ❌ |
+| Project | Get Service Hook from project | TBD |  |  | ❌ |
+| Project | Get Service Hook details | TBD |  |  | ❌ |
+| Project | Edit Service Hook details | TBD |  |  | ❌ |
+| Project | Remove Service Hook from project | TBD |  |  | ❌ |
+| Project | Dashboard settings (Create dashboards) | TBD |  |  | ❌ |
+| Project | Dashboard settings (Edit dashboards) | TBD |  |  | ❌ |
+| Project | Dashboard settings (Delete dashboards) | TBD |  |  | ❌ |
+| Project | Add Iteration to project | TBD |  |  | ❌ |
+| Project | Get Iteration from project | TBD |  |  | ❌ |
+| Project | Get Iteration details | TBD |  |  | ❌ |
+| Project | Edit Iteration details | TBD |  |  | ❌ |
+| Project | Remove Iteration from project | TBD |  |  | ❌ |
+| Project | Add Area to project | TBD |  |  | ❌ |
+| Project | Get Area from project | TBD |  |  | ❌ |
+| Project | Get Area details | TBD |  |  | ❌ |
+| Project | Edit Area details | TBD |  |  | ❌ |
+| Project | Remove Area from project | TBD |  |  | ❌ |
+| Project | Edit team configuration (Backlog navigation levels Epics) | TBD |  |  | ❌ |
+| Project | Edit team configuration (Backlog navigation levels Features) | TBD |  |  | ❌ |
+| Project | Edit team configuration (Backlog navigation levels Stories) | TBD |  |  | ❌ |
+| Project | Edit team configuration (Working days) | TBD |  |  | ❌ |
+| Project | Edit team configuration (Working with bugs) | TBD |  |  | ❌ |
 | Project | Connect to GitHub |  |  |  |  |
 | Project | Disconnect from GitHub |  |  |  |  |
 | Project | Add Agent pool (Self-hosted) to project | TBD |  |  |  |
@@ -133,48 +133,48 @@ This repository contains a bash script that will create and configure Azure DevO
 | Project | Get Service connection from project |  |  |  |  |
 | Project | Get Service connection details |  |  |  |  |
 | Project | Edit Service connection details |  |  |  |  |
-| Project | Remove Service connection from project | az devops service-endpoint azurerm delete | https://learn.microsoft.com/en-us/cli/azure/devops/service-endpoint?view=azure-cli-latest#az-devops-service-endpoint-delete |  |  |
-| Project | Add XAML build service to project |  |  |  |  |
-| Project | Get XAML build service from project |  |  |  |  |
-| Project | Get XAML build service details |  |  |  |  |
-| Project | Edit XAML build service details |  |  |  |  |
-| Project | Remove XAML build service from project |  |  |  |  |
-| Project | Configure Cross-repository settings (Enable Default branch name for new repositories) |  |  |  |  |
-| Project | Configure Cross-repository settings (Enable Allow users to manage permissions for their created branches) |  |  |  |  |
-| Project | Configure Cross-repository settings (Enable Create PRs as draft by default) |  |  |  |  |
-| Project | Configure Cross-repository policies (Enable Commit author email validation) |  |  |  |  |
-| Project | Configure Cross-repository policies (Enable File path validation) |  |  |  |  |
-| Project | Configure Cross-repository policies (Enable Case enforcement) |  |  |  |  |
-| Project | Configure Cross-repository policies (Enable Reserved names) |  |  |  |  |
-| Project | Configure Cross-repository policies (Enable Maximum path length) |  |  |  |  |
-| Project | Configure Cross-repository policies (Enable Maximum file size) |  |  |  |  |
-| Project | Configure Cross-repository policies (Add Require a minimum number of reviewers) |  |  |  |  |
-| Project | Configure Cross-repository policies (Get Require a minimum number of reviewers) |  |  |  |  |
-| Project | Configure Cross-repository policies (Edit Require a minimum number of reviewers) |  |  |  |  |
-| Project | Configure Cross-repository policies (Add Check for linked work items) |  |  |  |  |
-| Project | Configure Cross-repository policies (Get Check for linked work items) |  |  |  |  |
-| Project | Configure Cross-repository policies (Edit Check for linked work items) |  |  |  |  |
-| Project | Configure Cross-repository policies (Add Check for comment resolution) |  |  |  |  |
-| Project | Configure Cross-repository policies (Get Check for comment resolution) |  |  |  |  |
-| Project | Configure Cross-repository policies (Edit Check for comment resolution) |  |  |  |  |
-| Project | Configure Cross-repository policies (Add Limit merge types) |  |  |  |  |
-| Project | Configure Cross-repository policies (Get Limit merge types) |  |  |  |  |
-| Project | Configure Cross-repository policies (Edit Limit merge types) |  |  |  |  |
-| Project | Configure Cross-repository policies (Add Build Validation) |  |  |  |  |
-| Project | Configure Cross-repository policies (Get Build Validation) |  |  |  |  |
-| Project | Configure Cross-repository policies (Get Build Validations) |  |  |  |  |
-| Project | Configure Cross-repository policies (Edit Build Validation) |  |  |  |  |
-| Project | Configure Cross-repository policies (Remove Build Validation) |  |  |  |  |
-| Project | Configure Cross-repository policies (Add Status Check) |  |  |  |  |
-| Project | Configure Cross-repository policies (Get Status Check) |  |  |  |  |
-| Project | Configure Cross-repository policies (Get Status Checks) |  |  |  |  |
-| Project | Configure Cross-repository policies (Edit Status Check) |  |  |  |  |
-| Project | Configure Cross-repository policies (Remove Status Check) |  |  |  |  |
-| Project | Configure Cross-repository policies (Add Automatically included reviewers) |  |  |  |  |
-| Project | Configure Cross-repository policies (Get Automatically included reviewers) |  |  |  |  |
-| Project | Configure Cross-repository policies (Edit Automatically included reviewers) |  |  |  |  |
-| Project | Configure Cross-repository policies (Remove Automatically included reviewers) |  |  |  |  |
-| Project | Configure Cross-repository security  |  |  |  |  |
+| Project | Remove Service connection from project | az devops service-endpoint azurerm delete | https://learn.microsoft.com/en-us/cli/azure/devops/service-endpoint?view=azure-cli-latest#az-devops-service-endpoint-delete |  | ❌ |
+| Project | Add XAML build service to project |  |  |  | ❌ |
+| Project | Get XAML build service from project |  |  |  | ❌ |
+| Project | Get XAML build service details |  |  |  | ❌ |
+| Project | Edit XAML build service details |  |  |  | ❌ |
+| Project | Remove XAML build service from project |  |  |  | ❌ |
+| Project | Configure Cross-repository settings (Enable Default branch name for new repositories) |  |  |  | ❌ |
+| Project | Configure Cross-repository settings (Enable Allow users to manage permissions for their created branches) |  |  |  | ❌ |
+| Project | Configure Cross-repository settings (Enable Create PRs as draft by default) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Enable Commit author email validation) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Enable File path validation) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Enable Case enforcement) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Enable Reserved names) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Enable Maximum path length) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Enable Maximum file size) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Add Require a minimum number of reviewers) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Get Require a minimum number of reviewers) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Edit Require a minimum number of reviewers) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Add Check for linked work items) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Get Check for linked work items) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Edit Check for linked work items) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Add Check for comment resolution) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Get Check for comment resolution) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Edit Check for comment resolution) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Add Limit merge types) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Get Limit merge types) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Edit Limit merge types) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Add Build Validation) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Get Build Validation) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Get Build Validations) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Edit Build Validation) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Remove Build Validation) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Add Status Check) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Get Status Check) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Get Status Checks) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Edit Status Check) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Remove Status Check) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Add Automatically included reviewers) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Get Automatically included reviewers) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Edit Automatically included reviewers) |  |  |  | ❌ |
+| Project | Configure Cross-repository policies (Remove Automatically included reviewers) |  |  |  | ❌ |
+| Project | Configure Cross-repository security  |  |  |  | ❌ |
 | Project | Configure Retention policy |  |  |  |  |
 | Project | Add Dashboard to project |  |  |  |  |
 | Project | Get Dashboard from project |  |  |  |  |
@@ -195,30 +195,29 @@ This repository contains a bash script that will create and configure Azure DevO
 ## Boards
 | Category | Feature | Command / URL | Documentation | Supported by Az CLI | Configured |
 |---|---|---|---|---|---|
-| Board | Add Work-item to project | az devops wiki page create |  |  |  |
+| Board | Add Work-item to project | |  | ✔ | ✔ |
 | Board | Get Work-item from project |  |  |  |  |
 | Board | Get Work-item details |  |  |  |  |
-| Board | Edit Work-item details |  |  |  |  |
-| Board | Remove Work-item from project | az devops wiki page delete |  |  |  |
-| Board | Configure Board Card Fields |  |  |  |  |
-| Board | Configure Board Card Styles |  |  |  |  |
-| Board | Configure Board Card Tag colors |  |  |  |  |
-| Board | Configure Board Card Annotations |  |  |  |  |
-| Board | Configure Board Card Tests |  |  |  |  |
-| Board | Configure Board Columns |  |  |  |  |
-| Board | Configure Board Swimlanes |  |  |  |  |
-| Board | Configure Board Card reordering |  |  |  |  |
-| Board | Configure Board Status badge |  |  |  |  |
-| Board | Configure Backlog Column options |  |  |  |  |
-| Board | Configure Team member capacity |  |  |  |  |
-| Board | Add Query to project |  |  |  |  |
-| Board | Get Query from project |  |  |  |  |
-| Board | Get Query details |  |  |  |  |
-| Board | Edit Query details |  |  |  |  |
-| Board | Remove Query from project |  |  |  |  |
+| Board | Edit Work-item details |  |  |  | ❌ |
+| Board | Remove Work-item from project |  |  |  | ❌ |
+| Board | Configure Board Card Fields |  |  |  | ❌ |
+| Board | Configure Board Card Styles |  |  |  | ❌ |
+| Board | Configure Board Card Tag colors |  |  |  | ❌ |
+| Board | Configure Board Card Annotations |  |  |  | ❌ |
+| Board | Configure Board Card Tests |  |  |  | ❌ |
+| Board | Configure Board Columns |  |  |  | ❌ |
+| Board | Configure Board Swimlanes |  |  |  | ❌ |
+| Board | Configure Board Card reordering |  |  |  | ❌ |
+| Board | Configure Board Status badge |  |  |  | ❌ |
+| Board | Configure Backlog Column options |  |  |  | ❌ |
+| Board | Configure Team member capacity |  |  |  | ❌ |
+| Board | Add Query to project |  |  |  | ❌ |
+| Board | Get Query from project |  |  |  | ❌ |
+| Board | Get Query details |  |  |  | ❌ |
+| Board | Edit Query details |  |  |  | ❌ |
+| Board | Remove Query from project |  |  |  | ❌ |
 
 ## Repos
-
 | Category | Feature | Command / URL | Documentation | Supported by Az CLI | Configured |
 |---|---|---|---|---|---|
 | Repos | Add Repository to project |  |  |  |  |
