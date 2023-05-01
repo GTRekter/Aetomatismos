@@ -93,20 +93,26 @@ function add_users_to_organization {
 function install_extensions_in_organization {
     local ORG_NAME=$1
     local DEFAULT_JSON=$2
+    log "Getting installed extensions in the $ORG_NAME organization"
+    EXTENSIONS_LIST_RESPONSE=$(az devops extension list --organization "https://dev.azure.com/$ORG_NAME")
+    if [ $? -eq 0 ]; then
+        log verbose "Response: $EXTENSIONS_LIST_RESPONSE"
+        log success "Extensions were retrieved from $ORG_NAME organization"
+    else
+        log error "Extensions were not retrieved from $ORG_NAME organization"
+        return 1
+    fi
     log "Installing extensions in the $ORG_NAME organization"
-    for EXRENSION in $(echo "$DEFAULT_JSON" | jq -r '.organization.extensions[] | @base64'); do
-        EXRENSION_JSON=$(echo "$EXRENSION" | base64 --decode | jq -r '.')
-        log verbose "Extension: $EXRENSION_JSON"
-        ID=$(echo "$EXRENSION_JSON" | jq -r '.id')
+    for EXTENSION in $(echo "$DEFAULT_JSON" | jq -r '.organization.extensions[] | @base64'); do
+        EXTENSION_JSON=$(echo "$EXTENSION" | base64 --decode | jq -r '.')
+        log verbose "Extension: EXTENSION_JSON"
+        ID=$(echo "$EXTENSION_JSON" | jq -r '.id')
         log verbose "ID: $ID"
-        PUBLISHER_ID=$(echo "$EXRENSION_JSON" | jq -r '.publisher_id')
+        PUBLISHER_ID=$(echo "$EXTENSION_JSON" | jq -r '.publisher_id')
         log verbose "PUBLISHER_ID: $PUBLISHER_ID"
-        log "Checking if $ID extension is already installed"
-        log verbose "Command: az devops extension show --extension-id $ID --publisher-id $PUBLISHER_ID --organization https://dev.azure.com/$ORG_NAME"
-        RESPONSE=$(az devops extension show --extension-id "$ID" --publisher-id "$PUBLISHER_ID" --organization "https://dev.azure.com/$ORG_NAME")
-        if [ -z "$RESPONSE" ]; then
-            log "$ID is not installed"
-        else
+        log "Checking if $ID extension is already installed in $ORG_NAME organization"
+        EXTENSION=$(echo $EXTENSIONS_LIST_RESPONSE | jq -r '.[] | select(.extensionId == "'$ID'")')
+        if [ $? -eq 0 ]; then
             log warning "$ID is already installed. Skipping..."
             continue
         fi
