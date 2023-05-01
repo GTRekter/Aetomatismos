@@ -51,7 +51,8 @@ This repository contains a bash script that will create and configure Azure DevO
 | Organization | Storage | TBD |  |  |  |
 
 ## Project 
-
+| Category | Feature | Command / URL | Documentation | Supported by Az CLI | Configured |
+|---|---|---|---|---|---|
 | Project | Add administrator to project | TBD |  |  |  |
 | Project | Get administrators from project | TBD |  |  |  |
 | Project | Get administrator details | TBD |  |  |  |
@@ -192,7 +193,8 @@ This repository contains a bash script that will create and configure Azure DevO
 | Project | Remove Wiki page from project | az devops wiki page delete |  |  |  |
 
 ## Boards
-
+| Category | Feature | Command / URL | Documentation | Supported by Az CLI | Configured |
+|---|---|---|---|---|---|
 | Board | Add Work-item to project | az devops wiki page create |  |  |  |
 | Board | Get Work-item from project |  |  |  |  |
 | Board | Get Work-item details |  |  |  |  |
@@ -274,7 +276,8 @@ This repository contains a bash script that will create and configure Azure DevO
 | Repos | Remove Tag from project |  |  |  |  |
 
 ## Pipelines
-
+| Category | Feature | Command / URL | Documentation | Supported by Az CLI | Configured |
+|---|---|---|---|---|---|
 | Pipelines | Add Pipeline to project |  |  |  |  |
 | Pipelines | Get Pipeline from project |  |  |  |  |
 | Pipelines | Get Pipeline details |  |  |  |  |
