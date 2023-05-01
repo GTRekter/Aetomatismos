@@ -47,7 +47,6 @@ function log {
 # ==================== ORGANIZATION ====================
 function authenticate_to_azure_devops {
     local ORG_NAME=$1
-    local PAT=$2
     log "Authenticating to Azure DevOps"
     log verbose "Organization: $ORG_NAME"
     log verbose "Command: az devops login --organization https://dev.azure.com/$ORG_NAME"
@@ -94,6 +93,7 @@ function install_extensions_in_organization {
     local ORG_NAME=$1
     local DEFAULT_JSON=$2
     log "Getting installed extensions in the $ORG_NAME organization"
+    log verbose "Command: az devops extension list --organization https://dev.azure.com/$ORG_NAME"
     EXTENSIONS_LIST_RESPONSE=$(az devops extension list --organization "https://dev.azure.com/$ORG_NAME")
     if [ $? -eq 0 ]; then
         log verbose "Response: $EXTENSIONS_LIST_RESPONSE"
@@ -182,7 +182,7 @@ function connecting_organization_to_azure_active_directory {
         DOMAIN=$(echo "$RESPONSE_BODY" | jq -r '.fps.dataProviders.data."ms.vss-admin-web.organization-admin-aad-data-provider".orgnizationTenantData.domain')
         log verbose "DOMAIN: $DOMAIN"
         log warning "The $ORG_NAME organization is already connected to the $DISPLAY_NAME ($ID) Azure Active Directory. Skipping..."
-        return 1
+        return 0
     else
         log "The $ORG_NAME organization is not connected to Azure Active Directory. Connecting..."
     fi
@@ -683,20 +683,30 @@ function create_project {
     local ORG_NAME=$1
     local PROJECT_NAME=$2
     local DEFAULT_JSON=$3
+    log "Getting projects in the $ORG_NAME organization"
+    log verbose "az devops project list --org https://dev.azure.com/$ORG_NAME"
+    PROJECTS_LIST_RESPONSE=$(az devops project list --org "https://dev.azure.com/$ORG_NAME")
+    if [ $? -eq 0 ]; then
+        log verbose "Response: $PROJECTS_LIST_RESPONSE"
+        log success "Projects were retrieved from $ORG_NAME organization"
+    else
+        log error "Projects were not retrieved from $ORG_NAME organization"
+        return 1
+    fi
     log "Checking if $PROJECT_NAME project already exists"
-    log verbose "az devops project show --project $PROJECT_NAME --org https://dev.azure.com/$ORG_NAME"
-    RESPONSE=$(az devops project show --project "$PROJECT_NAME" --org "https://dev.azure.com/$ORG_NAME")
-    if [ -z "$RESPONSE" ]; then
+    PROJECT=$(echo $PROJECTS_LIST_RESPONSE | jq -r '.value[] | select(.name == "'"$PROJECT_NAME"'")')
+    if [ -z "$PROJECT" ]; then
         log "$PROJECT_NAME project does not exist"
     else
         log warning "Project $PROJECT_NAME already exists. Skipping..."
         return 0
     fi
     log "Creating $PROJECT_NAME project"
-    DESCRIPTION=$(echo "$DEFAULT_JSON" | jq -r '.organization.project.description')
-    PROCESS=$(echo "$DEFAULT_JSON" | jq -r '.organization.project.process')
-    log verbose "az devops project create --name $PROJECT_NAME --description '$DESCRIPTION' --detect false --org https://dev.azure.com/$ORG_NAME --process $PROCESS --source-control git --visibility private"
-    az devops project create --name "$PROJECT_NAME" --description "$DESCRIPTION" --detect false --org "https://dev.azure.com/$ORG_NAME" --process $PROCESS --source-control git --visibility private
+    DESCRIPTION=$(echo "$DEFAULT_JSON" | jq -r '.project.description')
+    PROCESS=$(echo "$DEFAULT_JSON" | jq -r '.project.process')
+    VISIBILITY=$(echo "$DEFAULT_JSON" | jq -r '.project.visibility')
+    log verbose "az devops project create --name $PROJECT_NAME --description '$DESCRIPTION' --detect false --org https://dev.azure.com/$ORG_NAME --process $PROCESS --source-control git --visibility $VISIBILITY"
+    az devops project create --name "$PROJECT_NAME" --description "$DESCRIPTION" --detect false --org "https://dev.azure.com/$ORG_NAME" --process $PROCESS --source-control git --visibility $VISIBILITY --output none
     if [ $? -eq 0 ]; then
         log success "$PROJECT_NAME project created successfully"
     else
@@ -708,8 +718,18 @@ function create_security_groups {
     local ORG_NAME=$1
     local PROJECT_NAME=$2
     local DEFAULT_JSON=$3
+    log "Getting security groups in the $ORG_NAME organization"
+    log verbose "az devops security group list --project $PROJECT_NAME --organization https://dev.azure.com/$ORG_NAME"
+    SECURITY_GROUPS_LIST_RESPONSE=$(az devops security group list --project "$PROJECT_NAME" --organization "https://dev.azure.com/$ORG_NAME" | jq '.graphGroups[] | select(.displayName == "AAA") | length > 0')
+    if [ $? -eq 0 ]; then
+        log verbose "Response: $SECURITY_GROUPS_LIST_RESPONSE"
+        log success "Security groups were retrieved from $ORG_NAME organization"
+    else
+        log error "Security groups were not retrieved from $ORG_NAME organization"
+        return 1
+    fi
     log "Creating security groups in the $PROJECT_NAME project"
-    for SECURITY_GROUP in $(echo "$DEFAULT_JSON" | jq -r '.organization.project.security_groups[] | @base64'); do
+    for SECURITY_GROUP in $(echo "$DEFAULT_JSON" | jq -r '.project.security_groups[] | @base64'); do
         SECURITY_GROUP_JSON=$(echo "$SECURITY_GROUP" | base64 --decode | jq -r '.')
         log verbose "Security group: $SECURITY_GROUP_JSON"
         NAME=$(echo "$SECURITY_GROUP_JSON" | jq -r '.name')
@@ -717,9 +737,7 @@ function create_security_groups {
         DESCRIPTION=$(echo "$SECURITY_GROUP_JSON" | jq -r '.description')
         log verbose "Security group description: $DESCRIPTION"
         log "Checking if $NAME security group already exists"
-
-        log verbose "az devops security group list --project $PROJECT_NAME --organization https://dev.azure.com/$ORG_NAME"
-        RESPONSE=$(az devops security group list --project "$PROJECT_NAME" --organization "https://dev.azure.com/$ORG_NAME" | jq '.graphGroups[] | select(.displayName == "AAA") | length > 0')
+        RESPONSE=$(echo $SECURITY_GROUPS_LIST_RESPONSE | jq '.graphGroups[] | select(.displayName == "AAA") | length > 0')
         if [ "$RESPONSE" ]; then
             log "$NAME security group does not exist"
         else
@@ -728,7 +746,7 @@ function create_security_groups {
         fi
         log "Creating $NAME security group in $PROJECT_NAME project"
         log verbose "az devops security group create --name $NAME --description '$DESCRIPTION' --project $PROJECT_NAME --organization https://dev.azure.com/$ORG_NAME --scope project"
-        az devops security group create --name "$NAME" --description "$DESCRIPTION" --project "$PROJECT_NAME" --organization "https://dev.azure.com/$ORG_NAME" --scope project
+        az devops security group create --name "$NAME" --description "$DESCRIPTION" --project "$PROJECT_NAME" --organization "https://dev.azure.com/$ORG_NAME" --scope project --output none
         if [ $? -eq 0 ]; then
             log success "User $NAME ($EMAIL) was added to $ORG_NAME organization"
         else
@@ -741,6 +759,17 @@ function create_repositories {
     local ORG_NAME=$1
     local PROJECT_NAME=$2
     local DEFAULT_JSON=$3
+    local PAT=$4
+    log "Getting repositories in $PROJECT_NAME project"
+    log verbose "az repos list --project $PROJECT_NAME --org https://dev.azure.com/$ORG_NAME"
+    REPOS_LIST_RESPONSE=$(az repos list --project "$PROJECT_NAME" --org "https://dev.azure.com/$ORG_NAME")
+    if [ $? -eq 0 ]; then
+        log verbose "Response: $REPOS_LIST_RESPONSE"
+        log success "Repositories were retrieved from $PROJECT_NAME project"
+    else
+        log error "Repositories were not retrieved from $PROJECT_NAME project"
+        return 1
+    fi
     log "Creating repositories in $PROJECT_NAME project"
     for REPO in $(echo "$DEFAULT_JSON" | jq -r '.repository.repositories[] | @base64'); do
         REPO_JSON=$(echo "$REPO" | base64 --decode | jq -r '.')
@@ -748,9 +777,8 @@ function create_repositories {
         REPO_NAME=$(echo "$REPO_JSON" | jq -r '.name')
         log verbose "Repository name: $REPO_NAME"
         log "Checking if $REPO_NAME repository already exists"
-        log verbose "az repos show --repository $REPO_NAME --project $PROJECT_NAME --org https://dev.azure.com/$ORG_NAME"
-        RESPONSE=$(az repos show --repository "$REPO_NAME" --project "$PROJECT_NAME" --org "https://dev.azure.com/$ORG_NAME")
-        if [ -z "$RESPONSE" ]; then
+        EXISTING_REPO=$(echo $REPOS_LIST_RESPONSE | jq -r '.[] | select(.name == "'"$REPO_NAME"'")')
+        if [ -z "$EXISTING_REPO" ]; then
             log "$REPO_NAME repository does not exist"
         else
             log warning "$REPO_NAME repository already exists. Skipping..."
@@ -758,7 +786,7 @@ function create_repositories {
         fi
         log "Creating $REPO_NAME repository..."
         log verbose "az repos create --name $REPO_NAME --project $PROJECT_NAME --org https://dev.azure.com/$ORG_NAME"
-        az repos create --name "$REPO_NAME" --project "$PROJECT_NAME" --org "https://dev.azure.com/$ORG_NAME"
+        az repos create --name "$REPO_NAME" --project "$PROJECT_NAME" --org "https://dev.azure.com/$ORG_NAME" --output none
         if [ $? -eq 0 ]; then
             log success "$REPO_NAME repository created successfully"
         else
@@ -767,22 +795,27 @@ function create_repositories {
         fi
         log "Cloning $REPO_NAME repository..."
         log verbose "git clone https://xxxxxxxx@dev.azure.com/$ORG_NAME/$PROJECT_NAME/_git/$REPO_NAME"
-        git clone https://$PAT@dev.azure.com/$ORG_NAME/$PROJECT_NAME/_git/$REPO_NAME
+        OUTPUT_GIT=$(git clone https://$PAT@dev.azure.com/$ORG_NAME/$PROJECT_NAME/_git/$REPO_NAME 2>&1 >/dev/null)
+        log verbose "Response: $OUTPUT_GIT"
         cd $REPO_NAME
         log "Configuring local git user"
         log verbose "git config user.email $EMAIL"
-        git config user.email "you@example.com"
+        OUTPUT_GIT=$(git config user.email "service.account@domain.com" 2>&1 >/dev/null)
+        log verbose "Response: $OUTPUT_GIT"
         log verbose "git config user.name $NAME"
-        git config user.name "Your Name"
+        OUTPUT_GIT=$(git config user.name "Service Account" 2>&1 >/dev/null)
+        log verbose "Response: $OUTPUT_GIT"
         log "Creating initial commit"
         log verbose "echo "# $REPO_NAME" > README.md"
         echo "# $REPO_NAME" > README.md
         log add README.md
         log verbose "commit -m 'Initial commit'"
-        git commit -m "Initial commit"
+        OUTPUT_GIT=$(git commit -m "Initial commit" 2>&1 >/dev/null)
+        log verbose "Response: $OUTPUT_GIT"
         log "Pushing initial commit to $REPO_NAME repository"
         log verbose "git push origin master"
-        git push origin master
+        OUTPUT_GIT=$(git push origin master 2>&1 >/dev/null)
+        log verbose "Response: $OUTPUT_GIT"
         for BRANCH in $(echo "$DEFAULT_JSON" | jq -r '.repository.branches[] | @base64'); do
             BRANCH_JSON=$(echo "$BRANCH" | base64 --decode | jq -r '.')
             log verbose "Branch: $BRANCH_JSON"
@@ -793,10 +826,12 @@ function create_repositories {
             if [ -z "$RESPONSE" ]; then
                 log "Creating $BRANCH_NAME branch"
                 log verbose "git checkout -b $BRANCH_NAME"
-                git checkout -b $BRANCH_NAME
+                OUTPUT_GIT=$(git checkout -b $BRANCH_NAME 2>&1 >/dev/null)
+                log verbose "Response: $OUTPUT_GIT"
                 log "Pushing $BRANCH_NAME branch to $REPO_NAME repository"
                 log verbose "git push origin $BRANCH_NAME"
-                git push origin $BRANCH_NAME
+                OUTPUT_GIT=$(git push origin $BRANCH_NAME 2>&1 >/dev/null)
+                log verbose "Response: $OUTPUT_GIT"
             else
                 log warning "$BRANCH_NAME branch already exists. Skipping..."
                 continue
@@ -1896,7 +1931,7 @@ PAT=$(echo "$DEFAULT_JSON" | jq -r '.organization.pat')
 ORG_NAME=$(echo "$DEFAULT_JSON" | jq -r '.organization.name')
 
 # ==================== GENERAL =========================
-authenticate_to_azure_devops $ORG_NAME $PAT
+authenticate_to_azure_devops $ORG_NAME
 # ==================== ORGANIZATION ====================
 ORG_ID=$(get_organization_id $ORG_NAME $PAT)
 out "[] Add users to the $ORG_NAME organization"
@@ -1948,7 +1983,7 @@ else
     exit 1
 fi
 # ==================== PROJECT =========================
-PROJECT_NAME=$(echo "$DEFAULT_JSON" | jq -r '.organization.project.name')
+PROJECT_NAME=$(echo "$DEFAULT_JSON" | jq -r '.project.name')
 out "[] Create project $PROJECT_NAME"
 create_project $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
 if [ $? -eq 0 ]; then
@@ -1967,7 +2002,7 @@ else
     exit 1
 fi
 out "[] Create project repositories"  
-create_repositories $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON"
+create_repositories $ORG_NAME $PROJECT_NAME "$DEFAULT_JSON" $PAT
 if [ $? -eq 0 ]; then
     out success "\r[x] Create project repositories\n"
 else
