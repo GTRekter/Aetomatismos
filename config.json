@@ -17,23 +17,6 @@
                 "publisher_id":"ms-devlabs"
             }
         ],
-        "project": {
-            "name": "",
-            "security_groups": [
-                {
-                    "name": "Connectivity approvers",
-                    "description": "Users who are allowed to approve the deployment of the Terraform configuration to the production environment"
-                },
-                {
-                    "name": "Identity approvers",
-                    "description": "Users who are allowed to approve the deployment of the Terraform configuration to the production environment"
-                },
-                {
-                    "name": "Management approvers",
-                    "description": "Users who are allowed to approve the deployment of the Terraform configuration to the production environment"
-                }
-            ]
-        },
         "policies": {
             "disallow_third_party_application_access_via_oauth": false,
             "disallow_ssh_authentication": false,
@@ -67,6 +50,26 @@
                 "name": "main"
             }
         }
+    },
+    "project": {
+        "name": "",
+        "description": "",
+        "process": "Agile",
+        "visibility": "private",
+        "security_groups": [
+            {
+                "name": "Connectivity approvers",
+                "description": "Users who are allowed to approve the deployment of the Terraform configuration to the production environment"
+            },
+            {
+                "name": "Identity approvers",
+                "description": "Users who are allowed to approve the deployment of the Terraform configuration to the production environment"
+            },
+            {
+                "name": "Management approvers",
+                "description": "Users who are allowed to approve the deployment of the Terraform configuration to the production environment"
+            }
+        ]
     },
     "board": {
         "epics": [
