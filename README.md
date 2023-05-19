@@ -44,7 +44,7 @@ This repository contains a bash script that will create and configure Azure DevO
 | Organization | Configure organization settings (Disable built-in tasks) | https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1 |  | ❌ | ✔ |
 | Organization | Configure organization settings (Disable Marketplace tasks) | https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1 |  | ❌ | ✔ |
 | Organization | Configure organization settings (Disable Node 6 tasks) | https://dev.azure.com/$ORG_NAME/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1 |  |❌  | ✔ |
-| Organization | Deployment pools | TBD |  | ❌ | ❌ |
+| Organization | Deployment pools | https://dev.azure.com/$ORG_NAME/_apis/distributedtask/pools?api-version=7.1-preview.1" |  | ❌ | ✔ |
 | Organization | Parallel jobs | TBD |  |  | ❌ |
 | Organization | OAuth configurations | https://dev.azure.com/$ORG_NAME/_apis/serviceendpoint/oauthconfiguration?api-version=7.1-preview.1 |  | ❌ | ✔ |
 | Organization | Repositories settings |  |  | ❌ | ❌ |
