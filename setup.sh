@@ -47,10 +47,11 @@ function log {
 # ==================== ORGANIZATION ====================
 function authenticate_to_azure_devops {
     local ORG_NAME=$1
+    local PAT=$2
     log "Authenticating to Azure DevOps"
     log verbose "Organization: $ORG_NAME"
     log verbose "Command: az devops login --organization https://dev.azure.com/$ORG_NAME"
-    echo "$PAT" | az devops login --organization https://dev.azure.com/$ORG_NAME
+    echo $PAT | az devops login --organization https://dev.azure.com/$ORG_NAME
     if [ $? -eq 0 ]; then
         log success "Authentication to Azure DevOps successfull"
     else
@@ -678,6 +679,69 @@ function configure_organization_repositories {
     #     out success "Configuration of the Default branch name to $DEFAULT_BRANCH_NAME was successful"
     # fi
 } # WIP (NOT AVAILABLE YET)
+function create_oauth_configurations {
+    local ORG_NAME=$1
+    local DEFAULT_JSON=$2
+    local PAT=$3
+    log "Getting OAuth configurations in the $ORG_NAME organization"
+    log verbose "Url: https://dev.azure.com/$ORG_NAME/_apis/serviceendpoint/oauthconfiguration?api-version=7.1-preview.1"
+    RESPONSE=$(curl --silent \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json" \
+            "https://dev.azure.com/$ORG_NAME/_apis/serviceendpoint/oauthconfiguration?api-version=7.1-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    log verbose "Response code: $HTTP_STATUS"
+    OAUTH_CONFIGURATION_LIST_RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    log verbose "Response body: $AGENT_POOL_LIST_RESPONSE_BODY"
+    if [ $HTTP_STATUS != 200 ]; then
+        log error "Failed to get the list of existing oauth configurations. $RESPONSE"
+        return 1;
+    else
+        log success "The list of existing oauth configurations was succesfully retrieved"
+    fi
+    for CONFIGURATION in $(echo "$DEFAULT_JSON" | jq -r '.organization.oauth_configurations[] | @base64'); do
+        CONFIGURATION_JSON=$(echo "$CONFIGURATION" | base64 --decode | jq -r '.')
+        log verbose "Oauth configuration: $CONFIGURATION_JSON"
+        NAME=$(echo "$CONFIGURATION_JSON" | jq -r '.name')
+        log verbose "Name: $NAME"
+        CLIENT_ID=$(echo "$CONFIGURATION_JSON" | jq -r '.client_id')
+        log verbose "Client ID: $CLIENT_ID"
+        CLIENT_SECRET=$(echo "$CONFIGURATION_JSON" | jq -r '.client_secret')
+        log verbose "Client secret: $CLIENT_SECRET"
+        ENDPOINT_TYPE=$(echo "$CONFIGURATION_JSON" | jq -r '.endpoint_type')
+        log verbose "Endpoint type: $ENDPOINT_TYPE"
+        URL=$(echo "$CONFIGURATION_JSON" | jq -r '.url')
+        log verbose "Url: $URL"
+        log "Checking if the $NAME oauth configuration already exists"
+        if [[ $(echo "$OAUTH_CONFIGURATION_LIST_RESPONSE_BODY" | jq '.value[] | select(.name == "'"$NAME"'") | length') -gt 0 ]]; then
+            log warning "$NAME oauth configuration already exists. Skipping..."
+            continue
+        else
+            log "$NAME oauth configuration does not exist."
+        fi
+        log "Creating $NAME oauth configuration"
+        log verbose "Url: https://dev.azure.com/$ORG_NAME/_apis/serviceendpoint/oauthconfiguration?api-version=7.1-preview.1"
+        RESPONSE=$(curl --silent \
+            --request POST \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json" \
+            --data-raw '{"clientId":"'"$CLIENT_ID"'","clientSecret":"'"$CLIENT_SECRET"'","endpointType":"'"$ENDPOINT_TYPE"'","name":"'"$NAME"'","url":"'"$URL"'"}' \
+            "https://dev.azure.com/$ORG_NAME/_apis/serviceendpoint/oauthconfiguration?api-version=7.1-preview.1")
+        HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+        log verbose "Response code: $HTTP_STATUS"
+        OAUTH_CONFIGURATION_LIST_RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+        log verbose "Response body: $AGENT_POOL_LIST_RESPONSE_BODY"
+        if [ $HTTP_STATUS != 200 ]; then
+            log error "Failed to create the oauth configuration. $RESPONSE"
+            return 1;
+        else
+            log success "The oauth configuration was succesfully created"
+        fi
+    done
+}
+
 # ==================== PROJECT =========================
 function create_project {
     local ORG_NAME=$1
@@ -1931,7 +1995,14 @@ PAT=$(echo "$DEFAULT_JSON" | jq -r '.organization.pat')
 ORG_NAME=$(echo "$DEFAULT_JSON" | jq -r '.organization.name')
 
 # ==================== GENERAL =========================
-authenticate_to_azure_devops $ORG_NAME
+out "[] Authenticate to Azure DevOps"
+authenticate_to_azure_devops $ORG_NAME $PAT
+if [ $? -eq 0 ]; then
+    out success "\r[x] Authenticate to Azure DevOps\n"
+else
+    out error "\r[] Authenticate to Azure DevOps\n"
+    exit 1
+fi
 # ==================== ORGANIZATION ====================
 ORG_ID=$(get_organization_id $ORG_NAME $PAT)
 out "[] Add users to the $ORG_NAME organization"
@@ -1982,6 +2053,15 @@ else
     out error "\r[] Configure organization repositories\n"
     exit 1
 fi
+out "[] Configure organization Oauth configurations"
+create_oauth_configurations $ORG_NAME "$DEFAULT_JSON" $PAT
+if [ $? -eq 0 ]; then
+    out success "\r[x] Configure organization Oauth configurations\n"
+else
+    out error "\r[] Configure organization Oauth configurations\n"
+    exit 1
+fi
+
 # ==================== PROJECT =========================
 PROJECT_NAME=$(echo "$DEFAULT_JSON" | jq -r '.project.name')
 out "[] Create project $PROJECT_NAME"

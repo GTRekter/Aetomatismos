@@ -49,11 +49,20 @@
                 "enable": true,
                 "name": "main"
             }
-        }
+        },
+        "oauth_configurations": [
+            {
+                "name":"Sample",
+                "client_id":"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+                "client_secret":"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+                "endpoint_type":"github",
+                "url":"https://github.com/xxxxxx"
+            }
+        ]
     },
     "project": {
-        "name": "",
-        "description": "",
+        "name": "Project",
+        "description": "Sample project description",
         "process": "Agile",
         "visibility": "private",
         "security_groups": [
