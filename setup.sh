@@ -741,6 +741,62 @@ function create_oauth_configurations {
         fi
     done
 }
+function create_deployment_pools {
+    local ORG_NAME=$1
+    local DEFAULT_JSON=$2
+    local PAT=$3
+    log "Getting deployment pools in the $ORG_NAME organization"
+    log verbose "Url: https://dev.azure.com/$ORG_NAME/_apis/distributedtask/pools?api-version=7.1-preview.1"
+    RESPONSE=$(curl --silent \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json" \
+            "https://dev.azure.com/$ORG_NAME/_apis/distributedtask/pools?api-version=7.1-preview.1")
+    HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+    log verbose "Response code: $HTTP_STATUS"
+    DEPLOYMENT_POOL_LIST_RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+    log verbose "Response body: $DEPLOYMENT_POOL_LIST_RESPONSE_BODY"
+    if [ $HTTP_STATUS != 200 ]; then
+        log error "Failed to get the list of existing deployment pools. $RESPONSE"
+        return 1;
+    else
+        log success "The list of existing deployment pools was succesfully retrieved"
+    fi
+    for DEPLOYMENT_POOL in $(echo "$DEFAULT_JSON" | jq -r '.organization.deployment_pools[] | @base64'); do
+        DEPLOYMENT_POOL_JSON=$(echo "$DEPLOYMENT_POOL" | base64 --decode | jq -r '.')
+        log verbose "Deployment pool configuration: $DEPLOYMENT_POOL_JSON"
+        NAME=$(echo "$DEPLOYMENT_POOL_JSON" | jq -r '.name')
+        log verbose "Name: $NAME"
+        PROJECTS=$(echo "$DEPLOYMENT_POOL_JSON" | jq -r '.projects')
+        log verbose "Projects: $PROJECTS"
+        log "Checking if the $NAME deployment pool already exists"
+        if [[ $(echo "$DEPLOYMENT_POOL_LIST_RESPONSE_BODY" | jq '.value[] | select(.name == "'"$NAME"'") | length') -gt 0 ]]; then
+            log warning "$NAME deployment pool exists. Skipping..."
+            continue
+        else
+            log "$NAME deployment pool does not exist."
+        fi
+        log "Creating $NAME deployment pool"
+        log verbose "Url: https://dev.azure.com/$ORG_NAME/_apis/distributedtask/pools?api-version=7.1-preview.1"
+        RESPONSE=$(curl --silent \
+            --request POST \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Basic $(echo -n :$PAT | base64)" \
+            --header "Content-Type: application/json" \
+            --data-raw '{"name":"'"$NAME"'",poolType: 2}' \
+            "https://dev.azure.com/$ORG_NAME/_apis/distributedtask/pools?api-version=7.1-preview.1")
+        HTTP_STATUS=$(tail -n1 <<< "$RESPONSE")
+        log verbose "Response code: $HTTP_STATUS"
+        OAUTH_CONFIGURATION_LIST_RESPONSE_BODY=$(sed '$ d' <<< "$RESPONSE") 
+        log verbose "Response body: $AGENT_POOL_LIST_RESPONSE_BODY"
+        if [ $HTTP_STATUS != 200 ]; then
+            log error "Failed to create the deployment pool. $RESPONSE"
+            return 1;
+        else
+            log success "The deployment pool was succesfully created"
+        fi
+    done
+}
 
 # ==================== PROJECT =========================
 function create_project {
@@ -1990,7 +2046,7 @@ function get_project_id {
 #     echo $VERBOSE
 # done
 
-DEFAULT_JSON=$(cat config.json)
+DEFAULT_JSON=$(cat dev-config.json)
 PAT=$(echo "$DEFAULT_JSON" | jq -r '.organization.pat')
 ORG_NAME=$(echo "$DEFAULT_JSON" | jq -r '.organization.name')
 
@@ -2059,6 +2115,14 @@ if [ $? -eq 0 ]; then
     out success "\r[x] Configure organization Oauth configurations\n"
 else
     out error "\r[] Configure organization Oauth configurations\n"
+    exit 1
+fi
+out "[] Configure organization deployment pools"
+create_deployment_pools $ORG_NAME "$DEFAULT_JSON" $PAT
+if [ $? -eq 0 ]; then
+    out success "\r[x] Configure organization deployment pools\n"
+else
+    out error "\r[] Configure organization deployment pools\n"
     exit 1
 fi
 
